@@ -12,4 +12,4 @@ add config in settings.json:
 ## Install
 
 install `vsce` first: `npm install -g vsce`
-run: `vsce package` then go to extensions panel, click tree dot "..." and "install from VSIX". choose compiled file.
+run: `vsce package` then go to extensions panel, click three dot "..." and "install from VSIX". choose compiled file.
