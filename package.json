@@ -1,0 +1,58 @@
+{
+  "name": "yuri-class-generator",
+  "displayName": "Yuri",
+  "description": "Generate class from interface with config options",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/alikarimii/yuri.git"
+},
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Yuri Quick Class Generator",
+      "properties": {
+        "yuri.generateClass.inNewFile": {
+          "type": "boolean",
+          "default": true,
+          "description": "Generate class in a new file (true) or inline in the current file (false)."
+        },
+        "yuri.generateClass.classNameSuffix": {
+          "type": "string",
+          "default": "Impl",
+          "description": "Suffix to add to generated class names."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "yuri.generateClassFromInterface",
+        "title": "Generate Class from Interface (Yuri)"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.15.30",
+    "@types/vscode": "^1.87.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ts-morph": "^21.0.0"
+  }
+}
