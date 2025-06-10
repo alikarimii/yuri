@@ -1,7 +1,7 @@
 {
-  "name": "yuri-class-generator",
+  "name": "yuri-typescript-toolbox",
   "displayName": "Yuri",
-  "description": "Generate class from interface with config options",
+  "description": "typescript toolbox with config options",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.87.0"
@@ -22,7 +22,7 @@
   "contributes": {
     "configuration": {
       "type": "object",
-      "title": "Yuri Quick Class Generator",
+      "title": "Yuri TypeScript Toolbox",
       "properties": {
         "yuri.generateClass.inNewFile": {
           "type": "boolean",

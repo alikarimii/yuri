@@ -1,4 +1,4 @@
-# Yuri - Quick Class Generator From Interface
+# Yuri - TypeScript Toolbox
 
 ## Config
 
