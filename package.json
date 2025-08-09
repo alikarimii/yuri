@@ -6,7 +6,7 @@
   "engines": {
     "vscode": "^1.87.0"
   },
-  "publisher": "alikarimii",
+  "publisher": "Qteam",
   "icon": "icon.png",
   "repository": {
   "type": "git",
@@ -20,14 +20,33 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "extension.createIndex",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "Yuri TypeScript Toolbox",
       "properties": {
         "yuri.generateClass.inNewFile": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Generate class in a new file (true) or inline in the current file (false)."
+        },
+        "yuri.generateViewInterfaces.inNewFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Generate view in a new file (true) or inline in the current file (false)."
+        },
+        "yuri.generateViewInterfaces.validationMode": {
+          "type": "string",
+          "default": "partial",
+          "description": "Validation mode in Generate View Interfaces: _viewSchema field match with Base interface"
         },
         "yuri.generateClass.classNameSuffix": {
           "type": "string",
@@ -38,9 +57,41 @@
     },
     "commands": [
       {
-        "command": "yuri.generateClassFromInterface",
-        "title": "Generate Class from Interface (Yuri)"
-      }
+      "command": "yuri.addGettersToClassProps",
+      "title": "Add Getters to Class Properties (Yuri)"
+    },
+    {
+      "command": "yuri.addReadonlyToClassProps",
+      "title": "Add readonly to Class Properties (Yuri)"
+    },
+    {
+      "command": "yuri.generateClassFromInterface",
+      "title": "Generate Class from Interface (Yuri)"
+    },
+    {
+      "command": "yuri.refactorCQRSHandlerToUseCase",
+      "title": "Refactor CQRS Handler to Use Case (Yuri)"
+    },
+    {
+      "command": "yuri.addMissingConstructorProps",
+      "title": "Add Missing Constructor Props"
+    },
+    {
+      "title": "Sync Class with Interface",
+      "command": "yuri.syncClassWithInterfaceProps"
+    },
+    {
+      "title": "Generate Class from Type",
+      "command": "yuri.generateClassFromType"
+    },
+    {
+      "command": "extension.createIndex",
+      "title": "Create index.ts and export all [Yuri]"
+    },
+    {
+      "title": "Generate View Interfaces",
+      "command": "yuri.generateViewInterfaces"
+    }
     ]
   },
   "scripts": {
