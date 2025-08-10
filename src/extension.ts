@@ -9,8 +9,11 @@ import {
   PropertyAssignment,
   PropertySignature,
   QuoteKind,
+  SourceFile,
   StringLiteral,
+  Symbol,
   SyntaxKind,
+  Type,
   TypeAliasDeclaration,
   TypeNode,
   TypeReferenceNode,
@@ -21,40 +24,102 @@ import * as vscode from "vscode";
 type ValidationMode = "strict" | "partial" | "loose";
 // --- shared project + cache ---
 let _project: Project | undefined;
-const _sfCache = new Map<
-  string,
-  { version: number; sf: import("ts-morph").SourceFile }
->();
-function getProject(): Project {
-  if (_project) return _project;
-  _project = new Project({
-    skipAddingFilesFromTsConfig: true,
-    skipFileDependencyResolution: true,
-    manipulationSettings: { quoteKind: QuoteKind.Single },
-    compilerOptions: { skipLibCheck: true, strict: false },
-  });
-  return _project;
+const _sfCache = new Map<string, { version: number; sf: SourceFile }>();
+
+function findNearestTsconfig(startFilePath: string): string | null {
+  let dir =
+    fs.existsSync(startFilePath) && fs.statSync(startFilePath).isDirectory()
+      ? startFilePath
+      : path.dirname(startFilePath);
+
+  for (;;) {
+    const tsconfig = path.join(dir, "tsconfig.json");
+    if (fs.existsSync(tsconfig)) return tsconfig;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
 }
 
-function getSourceFileFromDocument(doc: vscode.TextDocument) {
-  const key = doc.uri.toString();
+export function getProject(forFile?: string): Project {
+  if (_project) return _project;
+
+  const tsconfig = forFile ? findNearestTsconfig(forFile) : null;
+
+  if (tsconfig) {
+    _project = new Project({
+      tsConfigFilePath: tsconfig,
+      manipulationSettings: { quoteKind: QuoteKind.Single },
+      // important: allow dependency resolution
+      skipFileDependencyResolution: false,
+      // DO NOT pass addFilesFromTsConfig (not present in some versions)
+      // DO NOT pass skipAddingFilesFromTsConfig (defaults are fine)
+    });
+
+    // Some ts-morph versions don’t auto-add files; add them explicitly if needed.
+    try {
+      if (
+        _project.getSourceFiles().length === 0 &&
+        typeof (_project as any).addSourceFilesFromTsConfig === "function"
+      ) {
+        (_project as any).addSourceFilesFromTsConfig(tsconfig);
+      }
+    } catch {
+      /* ignore */
+    }
+  } else {
+    // Fallback project (no tsconfig found): allow resolution and add workspace files by glob.
+    _project = new Project({
+      manipulationSettings: { quoteKind: QuoteKind.Single },
+      skipFileDependencyResolution: false,
+      // this option exists on most versions; if your version complains, just remove it
+      skipAddingFilesFromTsConfig: true,
+      compilerOptions: { skipLibCheck: true, strict: false },
+    });
+
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    for (const f of folders) {
+      _project.addSourceFilesAtPaths(
+        path.join(f.uri.fsPath, "**/*.{ts,tsx,d.ts}")
+      );
+    }
+  }
+
+  return _project!;
+}
+
+export function getSourceFileFromDocument(
+  doc: vscode.TextDocument
+): SourceFile {
+  const fsPath = doc.uri.fsPath;
+  const key = fsPath;
   const cached = _sfCache.get(key);
   if (cached && cached.version === doc.version) return cached.sf;
-  const project = getProject();
-  const sf = project.createSourceFile(key, doc.getText(), { overwrite: true });
+
+  const project = getProject(fsPath);
+
+  let sf = project.getSourceFile(fsPath);
+  if (!sf) {
+    if (fs.existsSync(fsPath)) sf = project.addSourceFileAtPath(fsPath);
+    else
+      sf = project.createSourceFile(fsPath, doc.getText(), { overwrite: true });
+  } else {
+    sf.replaceWithText(doc.getText());
+  }
+
   _sfCache.set(key, { version: doc.version, sf });
   return sf;
 }
 
-async function writeFileUtf8(uri: vscode.Uri, text: string) {
+export async function writeFileUtf8(uri: vscode.Uri, text: string) {
   await vscode.workspace.fs.writeFile(uri, Buffer.from(text, "utf8"));
 }
 
-function getPropTypeFast(p: PropertySignature, fallback = "any") {
+export function getPropTypeFast(p: PropertySignature, fallback = "any") {
   const tn = p.getTypeNode();
   if (tn) return tn.getText();
   try {
-    return p.getType().getText(p); // slower path only when needed
+    return p.getType().getText(p);
   } catch {
     return fallback;
   }
@@ -1312,38 +1377,44 @@ export function activate(context: vscode.ExtensionContext) {
           "partial"
         );
 
-        const project = getProject();
+        // Ensure project + source file come from the real filesystem + tsconfig
+        const project = getProject(document.fileName);
         const sourceFile = getSourceFileFromDocument(document);
 
         // interface name from current line (cheap)
         const m = document
           .lineAt(range.start.line)
           .text.match(/interface\s+(\w+)/);
-        if (!m)
-          return vscode.window.showErrorMessage(
-            "Could not determine interface name."
-          );
+        if (!m) {
+          vscode.window.showErrorMessage("Could not determine interface name.");
+          return;
+        }
         const interfaceName = m[1];
 
         const iface = sourceFile.getInterface(interfaceName);
-        if (!iface)
-          return vscode.window.showErrorMessage(
+        if (!iface) {
+          vscode.window.showErrorMessage(
             `Interface ${interfaceName} not found in this file.`
           );
+          return;
+        }
 
         // find _viewSchemas as object literal in the same file (no workspace scan)
         const viewSchemasVar =
           sourceFile.getVariableDeclaration("_viewSchemas");
-        if (!viewSchemasVar)
-          return vscode.window.showErrorMessage(
+        if (!viewSchemasVar) {
+          vscode.window.showErrorMessage(
             `No '_viewSchemas' variable found in the file.`
           );
+          return;
+        }
 
         const init = viewSchemasVar.getInitializer();
         if (!init || !init.isKind(SyntaxKind.ObjectLiteralExpression)) {
-          return vscode.window.showErrorMessage(
+          vscode.window.showErrorMessage(
             `'_viewSchemas' must be initialized with an object literal.`
           );
+          return;
         }
         const obj = init.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
 
@@ -1363,7 +1434,9 @@ export function activate(context: vscode.ExtensionContext) {
           );
         }
 
-        // helpers
+        // ---------------- helpers ----------------
+        const toTitle = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
         const getPropName = (prop: PropertyAssignment): string => {
           const raw = prop.getNameNode().getText();
           return raw.replace(/^['"`]|['"`]$/g, "");
@@ -1376,6 +1449,84 @@ export function activate(context: vscode.ExtensionContext) {
               return [el.getLiteralText()];
             return [];
           });
+
+        type Split = { top: Set<string>; nested: Map<string, Set<string>> };
+        const splitFields = (fields: string[]): Split => {
+          const top = new Set<string>();
+          const nested = new Map<string, Set<string>>();
+          for (const f of fields) {
+            const parts = f.split(".");
+            if (parts.length === 1) {
+              top.add(parts[0]);
+            } else if (parts.length >= 2) {
+              const [parent, child] = parts as [string, string];
+              if (!nested.has(parent)) nested.set(parent, new Set());
+              nested.get(parent)!.add(child);
+            }
+          }
+          // If a parent appears both top-level and nested, prefer nested
+          for (const parent of nested.keys()) top.delete(parent);
+          return { top, nested };
+        };
+
+        // Type rendering helpers
+        const printType = (t: Type, ctx: Node) => t.getText(ctx);
+
+        const getTopPropTypeText = (name: string): string | null => {
+          const p = iface.getProperty(name);
+          if (!p) return null;
+          // If the property has an explicit annotation, use it verbatim (keeps 'string')
+          const tn = p.getTypeNode();
+          if (tn) return tn.getText();
+          // Fallback to the computed type (no 'apparent' boxing)
+          return p.getType().getNonNullableType().getText(p);
+        };
+
+        function getArrayElementTypeIfArray(t: Type): {
+          isArray: boolean;
+          elem: Type;
+        } {
+          const nn = t.getNonNullableType(); // don't use getApparentType -> avoids boxing 'string' => 'String'
+
+          if (nn.isArray()) {
+            const elem = nn.getArrayElementType();
+            if (elem) return { isArray: true, elem };
+          }
+          // Handle Array<T>/ReadonlyArray<T>
+          const typeArgs = nn.getTypeArguments?.() ?? [];
+          const symName = nn.getSymbol()?.getName?.();
+          if (
+            (symName === "Array" || symName === "ReadonlyArray") &&
+            typeArgs.length === 1
+          ) {
+            return { isArray: true, elem: typeArgs[0] };
+          }
+          return { isArray: false, elem: nn };
+        }
+
+        const getChildPropTypeText = (
+          parent: string,
+          child: string
+        ): { isArray: boolean; typeText: string } | null => {
+          const parentSig = iface.getProperty(parent);
+          if (!parentSig) return null;
+
+          const { isArray, elem } = getArrayElementTypeIfArray(
+            parentSig.getType()
+          );
+
+          const childSym = elem.getProperty(child);
+          if (!childSym) return null;
+
+          const childDecl = childSym.getDeclarations()?.[0] ?? iface;
+          // Avoid apparent type here too; stick to the declared/real type
+          const childTypeText = childSym
+            .getTypeAtLocation(childDecl)
+            .getNonNullableType()
+            .getText(childDecl);
+
+          return { isArray, typeText: childTypeText };
+        };
 
         let generated = 0;
         const warnings: string[] = [];
@@ -1391,9 +1542,41 @@ export function activate(context: vscode.ExtensionContext) {
           const fields = extractStringFields(arrInit);
           if (!fields.length) continue;
 
-          const invalid = fields.filter((f) => !ifacePropNames.has(f));
+          const { top, nested } = splitFields(fields);
 
-          let finalFields: string[];
+          // --- validation ---
+          const invalidTop = [...top].filter((f) => !ifacePropNames.has(f));
+          const invalidNestedParents = [...nested.keys()].filter(
+            (p) => !ifacePropNames.has(p)
+          );
+          const invalidNestedChildren: string[] = [];
+
+          // Try to validate children if we can introspect them
+          for (const [parent, childs] of nested) {
+            if (invalidNestedParents.includes(parent)) continue;
+            const parentSig = iface.getProperty(parent);
+            const { elem } = parentSig
+              ? getArrayElementTypeIfArray(parentSig.getType())
+              : { elem: undefined as any };
+            const childNames = elem
+              ? new Set(elem.getProperties().map((s: Symbol) => s.getName()))
+              : null;
+            if (!childNames) continue;
+            for (const c of childs) {
+              if (!childNames.has(c))
+                invalidNestedChildren.push(`${parent}.${c}`);
+            }
+          }
+
+          const invalid = [
+            ...invalidTop,
+            ...invalidNestedParents,
+            ...invalidNestedChildren,
+          ];
+
+          let finalTop = [...top];
+          let finalNested = new Map(nested);
+
           if (validationMode === "strict") {
             if (invalid.length) {
               warnings.push(
@@ -1401,10 +1584,14 @@ export function activate(context: vscode.ExtensionContext) {
               );
               continue;
             }
-            finalFields = fields;
           } else if (validationMode === "partial") {
-            finalFields = fields.filter((f) => ifacePropNames.has(f));
-            if (!finalFields.length) {
+            // keep only valid top-level names
+            finalTop = finalTop.filter((f) => ifacePropNames.has(f));
+            // require valid parent; keep children (even if we can't list them) so the emitter can try to resolve
+            for (const p of [...finalNested.keys()]) {
+              if (!ifacePropNames.has(p)) finalNested.delete(p);
+            }
+            if (!finalTop.length && !finalNested.size) {
               warnings.push(`Skipped '${viewName}': no valid fields.`);
               continue;
             }
@@ -1416,8 +1603,11 @@ export function activate(context: vscode.ExtensionContext) {
               );
             }
           } else {
-            // "loose"
-            finalFields = fields;
+            // loose: only require parent to exist
+            finalTop = finalTop.filter((f) => ifacePropNames.has(f));
+            for (const p of [...finalNested.keys()]) {
+              if (!ifacePropNames.has(p)) finalNested.delete(p);
+            }
             if (invalid.length) {
               warnings.push(
                 `Loosely generated '${viewName}': interface does not contain: ${invalid.join(
@@ -1427,22 +1617,52 @@ export function activate(context: vscode.ExtensionContext) {
             }
           }
 
-          const typeName = `${interfaceName}${
-            viewName.charAt(0).toUpperCase() + viewName.slice(1)
-          }`;
-          out.push(
-            `export interface ${typeName} extends Pick<${interfaceName}, '${finalFields.join(
-              `' | '`
-            )}'> {}`
-          );
+          // --- emit ---
+          const typeName = `${interfaceName}${toTitle(viewName)}`;
+          const lines: string[] = [];
+
+          // top-level fields
+          for (const name of finalTop) {
+            const tt = getTopPropTypeText(name);
+            if (!tt) continue;
+            lines.push(`  ${name}: ${normalizePrimitives(tt)};`);
+          }
+
+          // nested: parent: { child: T; ... } or Array<{ child: T; ... }>
+          for (const [parent, childs] of finalNested) {
+            const pieces: string[] = [];
+            let isArrayParent: boolean | null = null;
+
+            for (const child of childs) {
+              const info = getChildPropTypeText(parent, child);
+              if (!info) continue; // unresolved child -> skip (or output 'any' if preferred)
+              if (isArrayParent == null) isArrayParent = info.isArray;
+              if (isArrayParent !== info.isArray) isArrayParent = false; // mixed, treat as object
+              pieces.push(`${child}: ${normalizePrimitives(info.typeText)}`);
+            }
+
+            if (!pieces.length) continue;
+
+            const obj = `{ ${pieces.join("; ")} }`;
+            lines.push(
+              isArrayParent
+                ? `  ${parent}: Array<${obj}>;`
+                : `  ${parent}: ${obj};`
+            );
+          }
+
+          if (!lines.length) continue;
+
+          out.push(`export interface ${typeName} {\n${lines.join("\n")}\n}`);
           generated++;
         }
 
         if (!generated) {
-          return vscode.window.showErrorMessage(
+          vscode.window.showErrorMessage(
             `No view interfaces generated from '_viewSchemas'.` +
               (warnings.length ? ` Details: ${warnings.join(" | ")}` : "")
           );
+          return;
         }
 
         const content = out.join("\n") + "\n";
@@ -1905,5 +2125,11 @@ function getPropsFromDecl(
     return [];
   }
 }
-
+const normalizePrimitives = (txt: string) =>
+  txt
+    .replace(/\bString\b/g, "string")
+    .replace(/\bNumber\b/g, "number")
+    .replace(/\bBoolean\b/g, "boolean")
+    .replace(/\bSymbol\b/g, "symbol")
+    .replace(/\bBigInt\b/g, "bigint");
 export function deactivate() {}
