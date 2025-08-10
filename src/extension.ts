@@ -1376,6 +1376,7 @@ export function activate(context: vscode.ExtensionContext) {
           "validationMode",
           "partial"
         );
+        const iSuffix = config.get<string>("interfaceSuffix", "");
 
         // Ensure project + source file come from the real filesystem + tsconfig
         const project = getProject(document.fileName);
@@ -1618,7 +1619,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
 
           // --- emit ---
-          const typeName = `${interfaceName}${toTitle(viewName)}`;
+          const typeName = `${interfaceName}${toTitle(viewName)}${iSuffix}`;
           const lines: string[] = [];
 
           // top-level fields

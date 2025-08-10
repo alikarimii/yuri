@@ -2,7 +2,7 @@
   "name": "yuri-typescript-toolbox",
   "displayName": "Yuri",
   "description": "typescript toolbox with config options",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.87.0"
   },
@@ -47,6 +47,11 @@
           "type": "string",
           "default": "partial",
           "description": "Validation mode in Generate View Interfaces: _viewSchema field match with Base interface"
+        },
+        "yuri.generateViewInterfaces.interfaceSuffix": {
+          "type": "string",
+          "default": "ViewModel",
+          "description": "Suffix to add to generated interface names."
         },
         "yuri.generateClass.classNameSuffix": {
           "type": "string",
