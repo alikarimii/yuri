@@ -1377,11 +1377,9 @@ export function activate(context: vscode.ExtensionContext) {
           "partial"
         );
         const iSuffix = config.get<string>("interfaceSuffix", "");
-
         // Ensure project + source file come from the real filesystem + tsconfig
         const project = getProject(document.fileName);
         const sourceFile = getSourceFileFromDocument(document);
-
         // interface name from current line (cheap)
         const m = document
           .lineAt(range.start.line)
@@ -1391,7 +1389,6 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const interfaceName = m[1];
-
         const iface = sourceFile.getInterface(interfaceName);
         if (!iface) {
           vscode.window.showErrorMessage(
@@ -1399,7 +1396,6 @@ export function activate(context: vscode.ExtensionContext) {
           );
           return;
         }
-
         // find _viewSchemas as object literal in the same file (no workspace scan)
         const viewSchemasVar =
           sourceFile.getVariableDeclaration("_viewSchemas");
@@ -1409,7 +1405,6 @@ export function activate(context: vscode.ExtensionContext) {
           );
           return;
         }
-
         const init = viewSchemasVar.getInitializer();
         if (!init || !init.isKind(SyntaxKind.ObjectLiteralExpression)) {
           vscode.window.showErrorMessage(
@@ -1418,12 +1413,10 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const obj = init.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
-
         // collect interface props for validation
         const ifacePropNames = new Set(
           iface.getProperties().map((p) => p.getName())
         );
-
         const out: string[] = [];
         if (inNewFile) {
           out.push(
@@ -1434,15 +1427,12 @@ export function activate(context: vscode.ExtensionContext) {
             ""
           );
         }
-
         // ---------------- helpers ----------------
         const toTitle = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
         const getPropName = (prop: PropertyAssignment): string => {
           const raw = prop.getNameNode().getText();
           return raw.replace(/^['"`]|['"`]$/g, "");
         };
-
         const extractStringFields = (arr: ArrayLiteralExpression): string[] =>
           arr.getElements().flatMap((el) => {
             if (Node.isStringLiteral(el)) return [el.getLiteralText()];
@@ -1450,29 +1440,51 @@ export function activate(context: vscode.ExtensionContext) {
               return [el.getLiteralText()];
             return [];
           });
-
-        type Split = { top: Set<string>; nested: Map<string, Set<string>> };
+        type Split = {
+          top: Set<string>;
+          nested: Map<string, Set<string>>;
+          exclusions: Map<string, Set<string>>; // New: tracks fields to exclude, e.g., { "author": Set("privacy") }
+        };
         const splitFields = (fields: string[]): Split => {
           const top = new Set<string>();
           const nested = new Map<string, Set<string>>();
+          const exclusions = new Map<string, Set<string>>();
           for (const f of fields) {
+            // Check for exclusion syntax, e.g., "author.!privacy"
+            const exclusionMatch = f.match(/^(\w+)\.\!(\w+)$/);
+            if (exclusionMatch) {
+              const [, parent, excludedField] = exclusionMatch;
+              // Add parent to top-level fields to include the whole object
+              top.add(parent);
+              // Track the excluded field
+              if (!exclusions.has(parent)) {
+                exclusions.set(parent, new Set());
+              }
+              exclusions.get(parent)!.add(excludedField);
+              continue;
+            }
+            // Existing logic for regular fields
             const parts = f.split(".");
             if (parts.length === 1) {
               top.add(parts[0]);
             } else if (parts.length >= 2) {
               const [parent, child] = parts as [string, string];
-              if (!nested.has(parent)) nested.set(parent, new Set());
+              if (!nested.has(parent)) {
+                nested.set(parent, new Set());
+              }
               nested.get(parent)!.add(child);
             }
           }
-          // If a parent appears both top-level and nested, prefer nested
-          for (const parent of nested.keys()) top.delete(parent);
-          return { top, nested };
+          // If a parent appears both top-level and nested, prefer nested unless it's an exclusion
+          for (const parent of nested.keys()) {
+            if (!exclusions.has(parent)) {
+              top.delete(parent);
+            }
+          }
+          return { top, nested, exclusions };
         };
-
         // Type rendering helpers
         const printType = (t: Type, ctx: Node) => t.getText(ctx);
-
         const getTopPropTypeText = (name: string): string | null => {
           const p = iface.getProperty(name);
           if (!p) return null;
@@ -1482,13 +1494,11 @@ export function activate(context: vscode.ExtensionContext) {
           // Fallback to the computed type (no 'apparent' boxing)
           return p.getType().getNonNullableType().getText(p);
         };
-
         function getArrayElementTypeIfArray(t: Type): {
           isArray: boolean;
           elem: Type;
         } {
           const nn = t.getNonNullableType(); // don't use getApparentType -> avoids boxing 'string' => 'String'
-
           if (nn.isArray()) {
             const elem = nn.getArrayElementType();
             if (elem) return { isArray: true, elem };
@@ -1504,55 +1514,70 @@ export function activate(context: vscode.ExtensionContext) {
           }
           return { isArray: false, elem: nn };
         }
-
         const getChildPropTypeText = (
           parent: string,
           child: string
         ): { isArray: boolean; typeText: string } | null => {
           const parentSig = iface.getProperty(parent);
           if (!parentSig) return null;
-
           const { isArray, elem } = getArrayElementTypeIfArray(
             parentSig.getType()
           );
-
           const childSym = elem.getProperty(child);
           if (!childSym) return null;
-
           const childDecl = childSym.getDeclarations()?.[0] ?? iface;
           // Avoid apparent type here too; stick to the declared/real type
           const childTypeText = childSym
             .getTypeAtLocation(childDecl)
             .getNonNullableType()
             .getText(childDecl);
-
           return { isArray, typeText: childTypeText };
         };
-
         let generated = 0;
         const warnings: string[] = [];
-
         for (const prop of obj.getProperties()) {
           if (!prop.isKind(SyntaxKind.PropertyAssignment)) continue;
-
           const viewName = getPropName(prop);
           const arrInit = prop.getInitializer();
           if (!arrInit || !arrInit.isKind(SyntaxKind.ArrayLiteralExpression))
             continue;
-
           const fields = extractStringFields(arrInit);
           if (!fields.length) continue;
-
-          const { top, nested } = splitFields(fields);
-
+          const { top, nested, exclusions } = splitFields(fields);
           // --- validation ---
           const invalidTop = [...top].filter((f) => !ifacePropNames.has(f));
           const invalidNestedParents = [...nested.keys()].filter(
             (p) => !ifacePropNames.has(p)
           );
           const invalidNestedChildren: string[] = [];
-
-          // Try to validate children if we can introspect them
+          // Validate exclusions
+          const invalidExclusions: string[] = [];
+          for (const [parent, excludedFields] of exclusions) {
+            if (!ifacePropNames.has(parent)) {
+              invalidExclusions.push(
+                ...[...excludedFields].map((f) => `${parent}.!${f}`)
+              );
+              continue;
+            }
+            // Optionally validate excluded fields
+            if (validationMode === "strict" || validationMode === "partial") {
+              const parentSig = iface.getProperty(parent);
+              const parentType = parentSig ? parentSig.getType() : undefined;
+              const childNames = parentType
+                ? new Set(
+                    parentType.getProperties().map((s: Symbol) => s.getName())
+                  )
+                : null;
+              if (childNames) {
+                for (const excludedField of excludedFields) {
+                  if (!childNames.has(excludedField)) {
+                    invalidExclusions.push(`${parent}.!${excludedField}`);
+                  }
+                }
+              }
+            }
+          }
+          // Existing nested children validation
           for (const [parent, childs] of nested) {
             if (invalidNestedParents.includes(parent)) continue;
             const parentSig = iface.getProperty(parent);
@@ -1564,20 +1589,20 @@ export function activate(context: vscode.ExtensionContext) {
               : null;
             if (!childNames) continue;
             for (const c of childs) {
-              if (!childNames.has(c))
+              if (!childNames.has(c)) {
                 invalidNestedChildren.push(`${parent}.${c}`);
+              }
             }
           }
-
           const invalid = [
             ...invalidTop,
             ...invalidNestedParents,
             ...invalidNestedChildren,
+            ...invalidExclusions,
           ];
-
           let finalTop = [...top];
           let finalNested = new Map(nested);
-
+          let finalExclusions = new Map(exclusions);
           if (validationMode === "strict") {
             if (invalid.length) {
               warnings.push(
@@ -1586,13 +1611,24 @@ export function activate(context: vscode.ExtensionContext) {
               continue;
             }
           } else if (validationMode === "partial") {
-            // keep only valid top-level names
+            // Keep only valid top-level names
             finalTop = finalTop.filter((f) => ifacePropNames.has(f));
-            // require valid parent; keep children (even if we can't list them) so the emitter can try to resolve
+            // Require valid parent for nested and exclusions
             for (const p of [...finalNested.keys()]) {
-              if (!ifacePropNames.has(p)) finalNested.delete(p);
+              if (!ifacePropNames.has(p)) {
+                finalNested.delete(p);
+              }
             }
-            if (!finalTop.length && !finalNested.size) {
+            for (const p of [...finalExclusions.keys()]) {
+              if (!ifacePropNames.has(p)) {
+                finalExclusions.delete(p);
+              }
+            }
+            if (
+              !finalTop.length &&
+              !finalNested.size &&
+              !finalExclusions.size
+            ) {
               warnings.push(`Skipped '${viewName}': no valid fields.`);
               continue;
             }
@@ -1604,10 +1640,17 @@ export function activate(context: vscode.ExtensionContext) {
               );
             }
           } else {
-            // loose: only require parent to exist
+            // Loose: only require parent to exist
             finalTop = finalTop.filter((f) => ifacePropNames.has(f));
             for (const p of [...finalNested.keys()]) {
-              if (!ifacePropNames.has(p)) finalNested.delete(p);
+              if (!ifacePropNames.has(p)) {
+                finalNested.delete(p);
+              }
+            }
+            for (const p of [...finalExclusions.keys()]) {
+              if (!ifacePropNames.has(p)) {
+                finalExclusions.delete(p);
+              }
             }
             if (invalid.length) {
               warnings.push(
@@ -1617,47 +1660,65 @@ export function activate(context: vscode.ExtensionContext) {
               );
             }
           }
-
           // --- emit ---
           const typeName = `${interfaceName}${toTitle(viewName)}${iSuffix}`;
           const lines: string[] = [];
-
-          // top-level fields
+          // Top-level fields
           for (const name of finalTop) {
             const tt = getTopPropTypeText(name);
             if (!tt) continue;
-            lines.push(`  ${name}: ${normalizePrimitives(tt)};`);
+            // Check if this field has exclusions
+            const excludedFields = finalExclusions.get(name);
+            if (excludedFields) {
+              const parentSig = iface.getProperty(name);
+              if (!parentSig) continue;
+              const parentType = parentSig.getType().getNonNullableType();
+              const { isArray, elem } = getArrayElementTypeIfArray(parentType);
+              const childProps = elem.getProperties();
+              const childLines: string[] = [];
+              for (const childProp of childProps) {
+                const childName = childProp.getName();
+                if (excludedFields.has(childName)) continue; // Skip excluded fields
+                const childTypeText = childProp
+                  .getTypeAtLocation(parentSig)
+                  .getNonNullableType()
+                  .getText(parentSig);
+                childLines.push(
+                  `${childName}: ${normalizePrimitives(childTypeText)}`
+                );
+              }
+              if (!childLines.length) continue;
+              const obj = `{ ${childLines.join("; ")} }`;
+              lines.push(
+                isArray ? ` ${name}: Array<${obj}>;` : ` ${name}: ${obj};`
+              );
+            } else {
+              lines.push(` ${name}: ${normalizePrimitives(tt)};`);
+            }
           }
-
-          // nested: parent: { child: T; ... } or Array<{ child: T; ... }>
+          // Nested fields (existing logic)
           for (const [parent, childs] of finalNested) {
             const pieces: string[] = [];
             let isArrayParent: boolean | null = null;
-
             for (const child of childs) {
               const info = getChildPropTypeText(parent, child);
-              if (!info) continue; // unresolved child -> skip (or output 'any' if preferred)
+              if (!info) continue;
               if (isArrayParent == null) isArrayParent = info.isArray;
-              if (isArrayParent !== info.isArray) isArrayParent = false; // mixed, treat as object
+              if (isArrayParent !== info.isArray) isArrayParent = false;
               pieces.push(`${child}: ${normalizePrimitives(info.typeText)}`);
             }
-
             if (!pieces.length) continue;
-
             const obj = `{ ${pieces.join("; ")} }`;
             lines.push(
               isArrayParent
-                ? `  ${parent}: Array<${obj}>;`
-                : `  ${parent}: ${obj};`
+                ? ` ${parent}: Array<${obj}>;`
+                : ` ${parent}: ${obj};`
             );
           }
-
           if (!lines.length) continue;
-
           out.push(`export interface ${typeName} {\n${lines.join("\n")}\n}`);
           generated++;
         }
-
         if (!generated) {
           vscode.window.showErrorMessage(
             `No view interfaces generated from '_viewSchemas'.` +
@@ -1665,7 +1726,6 @@ export function activate(context: vscode.ExtensionContext) {
           );
           return;
         }
-
         const content = out.join("\n") + "\n";
         if (inNewFile) {
           const dir = path.dirname(document.uri.fsPath);
@@ -2126,11 +2186,13 @@ function getPropsFromDecl(
     return [];
   }
 }
+
 const normalizePrimitives = (txt: string) =>
   txt
     .replace(/\bString\b/g, "string")
     .replace(/\bNumber\b/g, "number")
     .replace(/\bBoolean\b/g, "boolean")
     .replace(/\bSymbol\b/g, "symbol")
-    .replace(/\bBigInt\b/g, "bigint");
+    .replace(/\bBigInt\b/g, "bigint")
+    .replace(/import\("[^"]+"\)\./g, ""); // Strip import("...").
 export function deactivate() {}
