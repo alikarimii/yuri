@@ -1759,6 +1759,500 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   );
+  // ---------------- generate factory from TYPE (fast same-file Omit/Pick) ----------------
+  const generateFactoryFromTypeCommand = vscode.commands.registerCommand(
+    "yuri.generateFactoryFromType",
+    async (document: vscode.TextDocument, range: vscode.Range) => {
+      try {
+        const cfg = vscode.workspace.getConfiguration("yuri.generateFactory");
+        const inNewFile = cfg.get<boolean>("inNewFile", true);
+        const functionPrefix = cfg.get<string>("functionPrefix", "create");
+        const stripSuffixRx = new RegExp(
+          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$")
+        );
+
+        const project = getProject();
+        const sourceFile = getSourceFileFromDocument(document);
+
+        const m = document.lineAt(range.start.line).text.match(/type\s+(\w+)/);
+        if (!m)
+          return vscode.window.showErrorMessage(
+            "Could not determine type name."
+          );
+        const typeName = m[1];
+
+        const typeAlias = sourceFile.getTypeAlias(typeName);
+        if (!typeAlias)
+          return vscode.window.showErrorMessage(
+            `Type ${typeName} not found in this file.`
+          );
+
+        // Collect properties (supports Omit<Base, 'a'|'b'> and Pick<Base, 'a'|'b'> via node text)
+        type PropInfo = { name: string; type: string; isOptional: boolean };
+        let properties: PropInfo[] = [];
+
+        const typeNode = typeAlias.getTypeNode();
+        const typeText = typeNode?.getText() ?? "";
+
+        // Try Omit<Base, 'a'|'b'> and Pick<Base, 'a'|'b'>
+        const omitMatch =
+          /Omit<\s*([A-Za-z0-9_\.]+)\s*,\s*((?:(?:['"][^'"]+['"])\s*(?:\|\s*)?)*)>/.exec(
+            typeText
+          );
+        const pickMatch =
+          /Pick<\s*([A-Za-z0-9_\.]+)\s*,\s*((?:(?:['"][^'"]+['"])\s*(?:\|\s*)?)*)>/.exec(
+            typeText
+          );
+
+        function parseKeyList(raw: string) {
+          return Array.from(raw.matchAll(/['"]([^'"]+)['"]/g)).map((m) => m[1]);
+        }
+
+        if (omitMatch || pickMatch) {
+          const [_, baseTypeName, rawKeys] = (omitMatch ?? pickMatch)!;
+          const keys = new Set(parseKeyList(rawKeys));
+
+          const simpleBase = baseTypeName.split(".").pop()!;
+          const baseIface = sourceFile.getInterface(simpleBase);
+          const baseType = sourceFile.getTypeAlias(simpleBase);
+
+          if (!baseIface && !baseType) {
+            return vscode.window.showErrorMessage(
+              `Base ${baseTypeName} not found in this file (factory-from-type avoids workspace scan).`
+            );
+          }
+
+          let baseProps: PropInfo[] = [];
+          if (baseIface) {
+            baseProps = baseIface.getProperties().map((p) => ({
+              name: p.getName(),
+              type: getPropTypeFast(p),
+              isOptional: p.hasQuestionToken(),
+            }));
+          } else if (baseType) {
+            const syms = baseType.getType().getProperties();
+            baseProps = syms.map((sym) => {
+              const decl = sym.getDeclarations()?.[0];
+              const name = sym.getName();
+              let type = "any";
+              let isOptional = false;
+              if (decl && decl.isKind(SyntaxKind.PropertySignature)) {
+                type = getPropTypeFast(decl);
+                isOptional = decl.hasQuestionToken();
+              } else {
+                try {
+                  type = sym.getTypeAtLocation(baseType).getText();
+                } catch {}
+              }
+              return { name, type, isOptional };
+            });
+          }
+
+          if (pickMatch) {
+            properties = baseProps.filter((p) => keys.has(p.name));
+            // warn if invalid keys
+            const invalid = Array.from(keys).filter(
+              (k) => !baseProps.some((p) => p.name === k)
+            );
+            if (invalid.length) {
+              return vscode.window.showErrorMessage(
+                `Invalid fields in Pick: ${invalid.join(
+                  ", "
+                )} not found in ${baseTypeName}.`
+              );
+            }
+          } else {
+            // Omit
+            properties = baseProps.filter((p) => !keys.has(p.name));
+          }
+        } else {
+          // Plain object-like alias
+          const syms = typeAlias.getType().getProperties();
+          properties = syms.map((sym) => {
+            const decl = sym.getDeclarations()?.[0];
+            const name = sym.getName();
+            if (decl && decl.isKind(SyntaxKind.PropertySignature)) {
+              return {
+                name,
+                type: getPropTypeFast(decl),
+                isOptional: decl.hasQuestionToken(),
+              };
+            }
+            let t = "any";
+            try {
+              t = sym.getTypeAtLocation(typeAlias).getText();
+            } catch {}
+            return { name, type: t, isOptional: false };
+          });
+        }
+
+        if (!properties.length)
+          return vscode.window.showErrorMessage(
+            `No properties found in type ${typeName}.`
+          );
+
+        // Factory name
+        const baseName = typeName.replace(stripSuffixRx, "");
+        const factoryName = `${functionPrefix}${baseName}`;
+
+        // Build function text
+        const lines: string[] = [];
+        if (inNewFile) {
+          lines.push(
+            `import type { ${typeName} } from './${path.basename(
+              document.fileName,
+              ".ts"
+            )}';`
+          );
+          lines.push("");
+        }
+        lines.push(
+          `export function ${factoryName}(init: ${typeName}): Readonly<${typeName}> {`
+        );
+        lines.push(`  return Object.freeze({`);
+        for (const p of properties) {
+          if (p.isOptional) {
+            lines.push(
+              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`
+            );
+          } else {
+            lines.push(`    ${p.name}: init.${p.name},`);
+          }
+        }
+        lines.push(`  });`);
+        lines.push(`}`);
+        const fnContent = lines.join("\n") + "\n";
+
+        if (inNewFile) {
+          const dir = path.dirname(document.uri.fsPath);
+          const target = vscode.Uri.file(path.join(dir, `${factoryName}.ts`));
+          await writeFileUtf8(target, fnContent);
+          vscode.window.showInformationMessage(
+            `Factory ${factoryName} generated in ${path.basename(
+              target.fsPath
+            )}.`
+          );
+        } else {
+          const edit = new vscode.WorkspaceEdit();
+          edit.insert(
+            document.uri,
+            new vscode.Position(document.lineCount + 1, 0),
+            "\n" + fnContent
+          );
+          await vscode.workspace.applyEdit(edit);
+          vscode.window.showInformationMessage(
+            `Factory ${factoryName} generated inline.`
+          );
+        }
+      } catch (err) {
+        console.error("generateFactoryFromType:", err);
+        vscode.window.showErrorMessage(
+          `Error generating factory from type: ${err}`
+        );
+      }
+    }
+  );
+
+  // ---------------- generate factory from INTERFACE (AST-first: Pick/Omit + alias base) ----------------
+  const generateFactoryFromInterfaceCommand = vscode.commands.registerCommand(
+    "yuri.generateFactoryFromInterface",
+    async (document: vscode.TextDocument, range: vscode.Range) => {
+      try {
+        const cfg = vscode.workspace.getConfiguration("yuri.generateFactory");
+        const inNewFile = cfg.get<boolean>("inNewFile", false);
+        const functionPrefix = cfg.get<string>("functionPrefix", "create");
+        const stripSuffixRx = new RegExp(
+          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$")
+        );
+
+        const project = getProject();
+        const sourceFile = getSourceFileFromDocument(document);
+
+        const line = document.lineAt(range.start.line).text;
+        const m = line.match(/interface\s+(\w+)/);
+        if (!m) {
+          return vscode.window.showErrorMessage(
+            "Could not determine interface name."
+          );
+        }
+        const interfaceName = m[1];
+
+        const iface = sourceFile.getInterface(interfaceName);
+        if (!iface) {
+          return vscode.window.showErrorMessage(
+            `Interface ${interfaceName} not found in this file.`
+          );
+        }
+
+        type PropInfo = { name: string; type: string; isOptional: boolean };
+        type HeritageKind = "pick" | "omit" | "none";
+        let heritageKind: HeritageKind = "none";
+        let baseTypeName: string | null = null;
+        let keyList: string[] = [];
+
+        // Helpers for parsing heritage type args (local to this command)
+        function extractStringLiteralKeys(
+          typeNode: import("ts-morph").TypeNode
+        ): string[] {
+          const text = typeNode.getText();
+          return Array.from(text.matchAll(/['"]([^'"]+)['"]/g)).map(
+            (m) => m[1]
+          );
+        }
+        function getBaseNameFromTypeArg(
+          typeNode: import("ts-morph").TypeNode
+        ): string | null {
+          try {
+            // getText() is fine; we only need the simple name (last segment if qualified)
+            const txt = typeNode.getText();
+            const simple = txt.split(".").pop();
+            return simple || null;
+          } catch {
+            return null;
+          }
+        }
+
+        for (const hc of iface.getHeritageClauses()) {
+          for (const tn of hc.getTypeNodes()) {
+            const exprText = tn.getExpression().getText();
+            if (exprText !== "Pick" && exprText !== "Omit") continue;
+
+            const args = tn.getTypeArguments();
+            if (args.length !== 2) continue;
+
+            const base = getBaseNameFromTypeArg(args[0]);
+            const keys = extractStringLiteralKeys(args[1]);
+            if (!base || !keys.length) continue;
+
+            heritageKind = exprText === "Pick" ? "pick" : "omit";
+            baseTypeName = base;
+            keyList = keys;
+            break;
+          }
+          if (heritageKind !== "none") break;
+        }
+
+        // Resolve nearby (same as your AST-first pattern)
+        async function ensureFileLoaded(fsPath: string) {
+          const existing = project.getSourceFile(fsPath);
+          if (existing) return existing;
+          const data = await vscode.workspace.fs.readFile(
+            vscode.Uri.file(fsPath)
+          );
+          const text = Buffer.from(data).toString("utf8");
+          return project.createSourceFile(fsPath, text, { overwrite: true });
+        }
+        async function fileExists(fsPath: string) {
+          try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(fsPath));
+            return true;
+          } catch {
+            return false;
+          }
+        }
+        async function resolveModuleToFsPath(
+          fromFsPath: string,
+          moduleSpecifier: string
+        ) {
+          const base = path.dirname(fromFsPath);
+          const candidates = [
+            path.resolve(base, `${moduleSpecifier}.ts`),
+            path.resolve(base, `${moduleSpecifier}.tsx`),
+            path.resolve(base, `${moduleSpecifier}.d.ts`),
+            path.resolve(base, moduleSpecifier, "index.ts"),
+            path.resolve(base, moduleSpecifier, "index.tsx"),
+          ];
+          for (const c of candidates) {
+            if (await fileExists(c)) return c;
+          }
+          return null;
+        }
+        async function tryFindDeclNearby(
+          name: string
+        ): Promise<InterfaceDeclaration | TypeAliasDeclaration | undefined> {
+          const simple = name.split(".").pop()!;
+
+          // same file
+          let idecl = sourceFile.getInterface(simple);
+          if (idecl) return idecl;
+          let tdecl = sourceFile.getTypeAlias(simple);
+          if (tdecl) return tdecl;
+
+          // relative imports (once)
+          for (const imp of sourceFile.getImportDeclarations()) {
+            const spec = imp.getModuleSpecifierValue();
+            if (!spec.startsWith(".")) continue;
+            const fsPath = await resolveModuleToFsPath(
+              document.uri.fsPath,
+              spec
+            );
+            if (!fsPath) continue;
+            const sf = await ensureFileLoaded(fsPath);
+            idecl = sf.getInterface(simple);
+            if (idecl) return idecl;
+            tdecl = sf.getTypeAlias(simple);
+            if (tdecl) return tdecl;
+          }
+
+          // same-dir probe
+          const dir = path.dirname(document.uri.fsPath);
+          for (const ext of [".ts", ".tsx", ".d.ts"]) {
+            const guess = path.join(dir, `${simple}${ext}`);
+            if (await fileExists(guess)) {
+              const sf = await ensureFileLoaded(guess);
+              idecl = sf.getInterface(simple);
+              if (idecl) return idecl;
+              tdecl = sf.getTypeAlias(simple);
+              if (tdecl) return tdecl;
+            }
+          }
+          return undefined;
+        }
+
+        function getPropsFromDecl(
+          decl: InterfaceDeclaration | TypeAliasDeclaration
+        ): PropInfo[] {
+          if (decl.getKind() === SyntaxKind.InterfaceDeclaration) {
+            const i = decl as InterfaceDeclaration;
+            return i.getProperties().map((p) => ({
+              name: p.getName(),
+              type: getPropTypeFast(p),
+              isOptional: p.hasQuestionToken(),
+            }));
+          }
+          const t = decl as TypeAliasDeclaration;
+          return t
+            .getType()
+            .getProperties()
+            .map((sym) => {
+              const decl = sym.getDeclarations()?.[0];
+              const name = sym.getName();
+              let type = "any";
+              let isOptional = false;
+              if (decl && decl.isKind(SyntaxKind.PropertySignature)) {
+                type = getPropTypeFast(decl);
+                isOptional = decl.hasQuestionToken();
+              } else {
+                try {
+                  type = sym.getTypeAtLocation(t).getText();
+                } catch {}
+              }
+              return { name, type, isOptional };
+            });
+        }
+
+        // Collect props
+        let properties: PropInfo[] = [];
+        if (heritageKind !== "none" && baseTypeName) {
+          const baseDecl = await tryFindDeclNearby(baseTypeName);
+          if (!baseDecl) {
+            return vscode.window.showErrorMessage(
+              `Base type ${baseTypeName} not found nearby (skipping full-project scan for speed).`
+            );
+          }
+          const baseProps = getPropsFromDecl(baseDecl);
+
+          if (heritageKind === "pick") {
+            const pickSet = new Set(keyList);
+            properties = baseProps.filter((p) => pickSet.has(p.name));
+
+            const invalid = keyList.filter(
+              (k) => !baseProps.some((p) => p.name === k)
+            );
+            if (invalid.length) {
+              return vscode.window.showErrorMessage(
+                `Invalid fields in Pick: ${invalid.join(
+                  ", "
+                )} not found in ${baseTypeName}.`
+              );
+            }
+          } else {
+            // Omit: remove omitted and merge local additions/overrides
+            const omitSet = new Set(keyList);
+            const afterOmit = baseProps.filter((p) => !omitSet.has(p.name));
+            const ownProps = iface.getProperties().map((p) => ({
+              name: p.getName(),
+              type: getPropTypeFast(p),
+              isOptional: p.hasQuestionToken(),
+            }));
+            const map = new Map(afterOmit.map((p) => [p.name, p]));
+            for (const op of ownProps) map.set(op.name, op);
+            properties = Array.from(map.values());
+          }
+        } else {
+          properties = iface.getProperties().map((p) => ({
+            name: p.getName(),
+            type: getPropTypeFast(p),
+            isOptional: p.hasQuestionToken(),
+          }));
+        }
+
+        if (!properties.length) {
+          return vscode.window.showErrorMessage(
+            `No properties found in interface ${interfaceName}.`
+          );
+        }
+
+        // Factory name
+        const baseName = interfaceName.replace(stripSuffixRx, "");
+        const factoryName = `${functionPrefix}${baseName}`;
+
+        // Generate function
+        const lines: string[] = [];
+        if (inNewFile) {
+          lines.push(
+            `import type { ${interfaceName} } from './${path.basename(
+              document.fileName,
+              ".ts"
+            )}';`
+          );
+          lines.push("");
+        }
+        lines.push(
+          `export function ${factoryName}(init: ${interfaceName}): Readonly<${interfaceName}> {`
+        );
+        lines.push(`  return Object.freeze({`);
+        for (const p of properties) {
+          if (p.isOptional) {
+            lines.push(
+              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`
+            );
+          } else {
+            lines.push(`    ${p.name}: init.${p.name},`);
+          }
+        }
+        lines.push(`  });`);
+        lines.push(`}`);
+        const fnContent = lines.join("\n") + "\n";
+
+        if (inNewFile) {
+          const originalDir = path.dirname(document.uri.fsPath);
+          const target = vscode.Uri.file(
+            path.join(originalDir, `${factoryName}.ts`)
+          );
+          await writeFileUtf8(target, fnContent);
+          vscode.window.showInformationMessage(
+            `Factory ${factoryName} generated in ${path.basename(
+              target.fsPath
+            )}.`
+          );
+        } else {
+          const edit = new vscode.WorkspaceEdit();
+          const position = new vscode.Position(document.lineCount + 1, 0);
+          edit.insert(document.uri, position, "\n" + fnContent);
+          await vscode.workspace.applyEdit(edit);
+          vscode.window.showInformationMessage(
+            `Factory ${factoryName} generated inline.`
+          );
+        }
+      } catch (err) {
+        console.error("generateFactoryFromInterface:", err);
+        vscode.window.showErrorMessage(
+          `Error generating factory from interface: ${err}`
+        );
+      }
+    }
+  );
 
   context.subscriptions.push(generateClassCommand);
   context.subscriptions.push(refactorToUseCaseCommand);
@@ -1769,6 +2263,8 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable);
   context.subscriptions.push(generateClassFromTypeCommand);
   context.subscriptions.push(generateViewInterfacesCommand);
+  context.subscriptions.push(generateFactoryFromInterfaceCommand);
+  context.subscriptions.push(generateFactoryFromTypeCommand);
 }
 
 class YuriCodeActionProvider implements vscode.CodeActionProvider {
@@ -1809,6 +2305,16 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
         arguments: [document, range],
       };
       actions.push(generateViewInterfacesFix);
+      const generateFactoryFromInterface = new vscode.CodeAction(
+        "Generate Factory From Interfaces (Yuri)",
+        vscode.CodeActionKind.QuickFix
+      );
+      generateFactoryFromInterface.command = {
+        title: "Generate Factory From Interfaces",
+        command: "yuri.generateFactoryFromInterface",
+        arguments: [document, range],
+      };
+      actions.push(generateFactoryFromInterface);
     }
 
     if (lineText.includes("type ")) {
@@ -1822,6 +2328,16 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
         arguments: [document, range],
       };
       actions.push(fix);
+      const generateFactoryFromType = new vscode.CodeAction(
+        "Generate Factory From Type (Yuri)",
+        vscode.CodeActionKind.QuickFix
+      );
+      generateFactoryFromType.command = {
+        title: "Generate Factory From Type",
+        command: "yuri.generateFactoryFromType",
+        arguments: [document, range],
+      };
+      actions.push(generateFactoryFromType);
     }
 
     const documentText = document.getText();

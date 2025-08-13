@@ -2,16 +2,16 @@
   "name": "yuri-typescript-toolbox",
   "displayName": "Yuri",
   "description": "typescript toolbox with config options",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.87.0"
   },
   "publisher": "Qteam",
   "icon": "icon.png",
   "repository": {
-  "type": "git",
-  "url": "https://github.com/alikarimii/yuri.git"
-},
+    "type": "git",
+    "url": "https://github.com/alikarimii/yuri.git"
+  },
   "categories": [
     "Programming Languages"
   ],
@@ -57,46 +57,61 @@
           "type": "string",
           "default": "Impl",
           "description": "Suffix to add to generated class names."
+        },
+        "yuri.generateFactory.inNewFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Generate factory in a new file (true) or inline in the current file (false)."
+        },
+        "yuri.generateFactory.functionPrefix": {
+          "type": "string",
+          "default": "create",
+          "description": "function prefix for Factory"
+        },
+        "yuri.generateFactory.stripSuffixRegex": {
+          "type": "string",
+          "default": "(ViewModel|View|Props)$",
+          "description": "stripe Suffix Regex."
         }
       }
     },
     "commands": [
       {
-      "command": "yuri.addGettersToClassProps",
-      "title": "Add Getters to Class Properties (Yuri)"
-    },
-    {
-      "command": "yuri.addReadonlyToClassProps",
-      "title": "Add readonly to Class Properties (Yuri)"
-    },
-    {
-      "command": "yuri.generateClassFromInterface",
-      "title": "Generate Class from Interface (Yuri)"
-    },
-    {
-      "command": "yuri.refactorCQRSHandlerToUseCase",
-      "title": "Refactor CQRS Handler to Use Case (Yuri)"
-    },
-    {
-      "command": "yuri.addMissingConstructorProps",
-      "title": "Add Missing Constructor Props"
-    },
-    {
-      "title": "Sync Class with Interface",
-      "command": "yuri.syncClassWithInterfaceProps"
-    },
-    {
-      "title": "Generate Class from Type",
-      "command": "yuri.generateClassFromType"
-    },
-    {
-      "command": "extension.createIndex",
-      "title": "Create index.ts and export all [Yuri]"
-    },
-    {
-      "title": "Generate View Interfaces",
-      "command": "yuri.generateViewInterfaces"
-    }
+        "command": "yuri.addGettersToClassProps",
+        "title": "Add Getters to Class Properties (Yuri)"
+      },
+      {
+        "command": "yuri.addReadonlyToClassProps",
+        "title": "Add readonly to Class Properties (Yuri)"
+      },
+      {
+        "command": "yuri.generateClassFromInterface",
+        "title": "Generate Class from Interface (Yuri)"
+      },
+      {
+        "command": "yuri.refactorCQRSHandlerToUseCase",
+        "title": "Refactor CQRS Handler to Use Case (Yuri)"
+      },
+      {
+        "command": "yuri.addMissingConstructorProps",
+        "title": "Add Missing Constructor Props"
+      },
+      {
+        "title": "Sync Class with Interface",
+        "command": "yuri.syncClassWithInterfaceProps"
+      },
+      {
+        "title": "Generate Class from Type",
+        "command": "yuri.generateClassFromType"
+      },
+      {
+        "command": "extension.createIndex",
+        "title": "Create index.ts and export all [Yuri]"
+      },
+      {
+        "title": "Generate View Interfaces",
+        "command": "yuri.generateViewInterfaces"
+      }
     ]
   },
   "scripts": {
