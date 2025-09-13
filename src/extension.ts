@@ -1389,6 +1389,9 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const interfaceName = m[1];
+        const noUnderscoreInterfaceName = interfaceName.startsWith("_")
+          ? interfaceName.slice(1)
+          : interfaceName;
         const iface = sourceFile.getInterface(interfaceName);
         if (!iface) {
           vscode.window.showErrorMessage(
@@ -1661,7 +1664,11 @@ export function activate(context: vscode.ExtensionContext) {
             }
           }
           // --- emit ---
-          const typeName = `${interfaceName}${toTitle(viewName)}${iSuffix}`;
+          const typeName = `${
+            noUnderscoreInterfaceName === toTitle(viewName)
+              ? ""
+              : noUnderscoreInterfaceName
+          }${toTitle(viewName)}${iSuffix}`;
           const lines: string[] = [];
           // Top-level fields
           for (const name of finalTop) {
