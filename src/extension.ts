@@ -433,19 +433,32 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // custom for our project
   const refactorToUseCaseCommand = vscode.commands.registerCommand(
     "yuri.refactorCQRSHandlerToUseCase",
     async (document: vscode.TextDocument) => {
       try {
         const project = new Project({ useInMemoryFileSystem: true });
 
+        const config = vscode.workspace.getConfiguration(
+          "yuri.refactorCQRSHandlerToUseCase"
+        );
+        const resultOk = config.get<string>("resultOk", "resultOk");
+        const resultFailure = config.get<string>(
+          "resultFailure",
+          "resultFailure"
+        );
         const sourceFile = project.createSourceFile(
           "temp.ts",
           document.getText(),
           { overwrite: true }
         );
 
-        const refactoredContent = refactorCQRSHandlerToUseCase(sourceFile);
+        const refactoredContent = refactorCQRSHandlerToUseCase(
+          sourceFile,
+          resultOk,
+          resultFailure
+        );
 
         if (!refactoredContent) {
           vscode.window.showErrorMessage("No CQRS Handler found to refactor.");
@@ -2450,7 +2463,11 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
   }
 }
 
-function refactorCQRSHandlerToUseCase(sourceFile: any): string | null {
+function refactorCQRSHandlerToUseCase(
+  sourceFile: any,
+  resultOk: string,
+  resultFailure: string
+): string | null {
   const text = sourceFile.getFullText();
 
   const isQueryHandler =
@@ -2520,11 +2537,17 @@ function refactorCQRSHandlerToUseCase(sourceFile: any): string | null {
     "import { IUseCase } from '@common/domain/usecase'",
   ];
 
-  if (text.includes("failure(")) {
-    newImports.push("import { useCaseFailure } from '@common/domain'");
-  }
-  if (text.includes("ok(")) {
-    newImports.push("import { useCaseOk } from '@common/domain'");
+  if (text.includes("failure(") && text.includes("ok(")) {
+    newImports.push(
+      `import { ${resultFailure}, ${resultOk} } from '@common/domain'`
+    );
+  } else {
+    if (text.includes("failure(")) {
+      newImports.push(`import { ${resultFailure} } from '@common/domain'`);
+    }
+    if (text.includes("ok(")) {
+      newImports.push(`import { ${resultOk} } from '@common/domain'`);
+    }
   }
 
   for (let i = 0; i < importLines.length; i++) {
@@ -2584,14 +2607,14 @@ function refactorCQRSHandlerToUseCase(sourceFile: any): string | null {
   if (text.includes("failure(")) {
     refactoredContent = refactoredContent.replace(
       /return\s+failure\(/g,
-      "return useCaseFailure("
+      `return ${resultFailure}(`
     );
   }
 
   if (text.includes("ok(")) {
     refactoredContent = refactoredContent.replace(
       /return\s+ok\(/g,
-      "return useCaseOk("
+      `return ${resultOk}(`
     );
   }
 
