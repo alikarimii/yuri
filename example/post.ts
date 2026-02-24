@@ -1,7 +1,7 @@
 const _viewSchemas = {
   feed: ["id", "title", "text"],
-  home: ["id", "title", "text", "images"],
-  profile: ["id", "title", "text", "images", "author.!id"],
+  home: ["id", "title", "?text", "images"],
+  profile: ["id", "title", "text", "images", "author.!id", "author.?name"],
 };
 // Post with all property types defined, but not all properties are required
 interface _Post {
@@ -16,23 +16,4 @@ interface _Post {
     id: string;
     name: string;
   };
-}
-
-export interface PostFeedViewModel {
-  id: string;
-  title: string;
-  text: string;
-}
-export interface PostHomeViewModel {
-  id: string;
-  title: string;
-  text: string;
-  images: string[];
-}
-export interface PostProfileViewModel {
-  id: string;
-  title: string;
-  text: string;
-  images: string[];
-  author: { name: string };
 }
