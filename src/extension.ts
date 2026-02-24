@@ -80,7 +80,7 @@ export function getProject(forFile?: string): Project {
     const folders = vscode.workspace.workspaceFolders ?? [];
     for (const f of folders) {
       _project.addSourceFilesAtPaths(
-        path.join(f.uri.fsPath, "**/*.{ts,tsx,d.ts}")
+        path.join(f.uri.fsPath, "**/*.{ts,tsx,d.ts}"),
       );
     }
   }
@@ -89,7 +89,7 @@ export function getProject(forFile?: string): Project {
 }
 
 export function getSourceFileFromDocument(
-  doc: vscode.TextDocument
+  doc: vscode.TextDocument,
 ): SourceFile {
   const fsPath = doc.uri.fsPath;
   const key = fsPath;
@@ -147,7 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
           (file: string) =>
             file !== "index.ts" &&
             file.endsWith(".ts") &&
-            !file.endsWith(".d.ts")
+            !file.endsWith(".d.ts"),
         );
 
       const exportLines = files.map((file: string) => {
@@ -159,15 +159,15 @@ export function activate(context: vscode.ExtensionContext) {
       fs.writeFileSync(indexPath, exportLines.join("\n") + "\n");
 
       vscode.window.showInformationMessage(
-        `index.ts created with ${files.length} exports`
+        `index.ts created with ${files.length} exports`,
       );
-    }
+    },
   );
 
   const codeActionProvider = vscode.languages.registerCodeActionsProvider(
     { language: "typescript", scheme: "file" },
     new YuriCodeActionProvider(),
-    { providedCodeActionKinds: YuriCodeActionProvider.providedCodeActionKinds }
+    { providedCodeActionKinds: YuriCodeActionProvider.providedCodeActionKinds },
   );
   context.subscriptions.push(codeActionProvider);
 
@@ -188,7 +188,7 @@ export function activate(context: vscode.ExtensionContext) {
         const m = line.match(/interface\s+(\w+)/);
         if (!m) {
           return vscode.window.showErrorMessage(
-            "Could not determine interface name."
+            "Could not determine interface name.",
           );
         }
         const interfaceName = m[1];
@@ -197,7 +197,7 @@ export function activate(context: vscode.ExtensionContext) {
         const iface = sourceFile.getInterface(interfaceName);
         if (!iface) {
           return vscode.window.showErrorMessage(
-            `Interface ${interfaceName} not found in this file.`
+            `Interface ${interfaceName} not found in this file.`,
           );
         }
 
@@ -230,7 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // 4) Resolve base declaration nearby (interface OR type alias)
         async function tryFindDeclNearby(
-          name: string
+          name: string,
         ): Promise<InterfaceDeclaration | TypeAliasDeclaration | undefined> {
           const simple = name.split(".").pop()!;
 
@@ -246,7 +246,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!spec.startsWith(".")) continue;
             const fsPath = await resolveModuleToFsPath(
               document.uri.fsPath,
-              spec
+              spec,
             );
             if (!fsPath) continue;
 
@@ -277,7 +277,7 @@ export function activate(context: vscode.ExtensionContext) {
           const existing = project.getSourceFile(fsPath);
           if (existing) return existing;
           const data = await vscode.workspace.fs.readFile(
-            vscode.Uri.file(fsPath)
+            vscode.Uri.file(fsPath),
           );
           const text = Buffer.from(data).toString("utf8");
           return project.createSourceFile(fsPath, text, { overwrite: true });
@@ -292,7 +292,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         async function resolveModuleToFsPath(
           fromFsPath: string,
-          moduleSpecifier: string
+          moduleSpecifier: string,
         ) {
           const base = path.dirname(fromFsPath);
           const candidates = [
@@ -315,7 +315,7 @@ export function activate(context: vscode.ExtensionContext) {
           const baseDecl = await tryFindDeclNearby(baseTypeName);
           if (!baseDecl) {
             return vscode.window.showErrorMessage(
-              `Base type ${baseTypeName} not found nearby (skipping full-project scan for speed).`
+              `Base type ${baseTypeName} not found nearby (skipping full-project scan for speed).`,
             );
           }
 
@@ -327,13 +327,13 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Validate (warn if keys not in base)
             const invalid = keyList.filter(
-              (k) => !baseProps.some((p) => p.name === k)
+              (k) => !baseProps.some((p) => p.name === k),
             );
             if (invalid.length) {
               return vscode.window.showErrorMessage(
                 `Invalid fields in Pick: ${invalid.join(
-                  ", "
-                )} not found in ${baseTypeName}.`
+                  ", ",
+                )} not found in ${baseTypeName}.`,
               );
             }
           } else {
@@ -363,7 +363,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!properties.length) {
           return vscode.window.showErrorMessage(
-            `No properties found in interface ${interfaceName}.`
+            `No properties found in interface ${interfaceName}.`,
           );
         }
 
@@ -379,15 +379,15 @@ export function activate(context: vscode.ExtensionContext) {
           lines.push(
             `import { ${interfaceName} } from './${path.basename(
               document.fileName,
-              ".ts"
-            )}'`
+              ".ts",
+            )}'`,
           );
           lines.push("");
         }
         lines.push(`export class ${className} implements ${interfaceName} {`);
         for (const p of properties) {
           lines.push(
-            `  readonly ${p.name}${p.isOptional ? "?" : ""}: ${p.type}`
+            `  readonly ${p.name}${p.isOptional ? "?" : ""}: ${p.type}`,
           );
         }
         lines.push("");
@@ -395,7 +395,7 @@ export function activate(context: vscode.ExtensionContext) {
         for (const p of properties) {
           if (p.isOptional) {
             lines.push(
-              `    this.${p.name} = init.${p.name} ?? ${defaultFor(p.type)}`
+              `    this.${p.name} = init.${p.name} ?? ${defaultFor(p.type)}`,
             );
           } else {
             lines.push(`    this.${p.name} = init.${p.name}`);
@@ -409,11 +409,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (inNewFile) {
           const originalDir = path.dirname(document.uri.fsPath);
           const target = vscode.Uri.file(
-            path.join(originalDir, `${className}.ts`)
+            path.join(originalDir, `${className}.ts`),
           );
           await writeFileUtf8(target, classContent);
           vscode.window.showInformationMessage(
-            `Class ${className} generated in new file: ${className}.ts`
+            `Class ${className} generated in new file: ${className}.ts`,
           );
         } else {
           const edit = new vscode.WorkspaceEdit();
@@ -421,16 +421,16 @@ export function activate(context: vscode.ExtensionContext) {
           edit.insert(document.uri, position, "\n" + classContent);
           await vscode.workspace.applyEdit(edit);
           vscode.window.showInformationMessage(
-            `Class ${className} generated inline.`
+            `Class ${className} generated inline.`,
           );
         }
       } catch (err) {
         console.error("generateClassFromInterface (ast-first):", err);
         vscode.window.showErrorMessage(
-          `Error generating class from interface: ${err}`
+          `Error generating class from interface: ${err}`,
         );
       }
-    }
+    },
   );
 
   // custom for our project
@@ -441,23 +441,23 @@ export function activate(context: vscode.ExtensionContext) {
         const project = new Project({ useInMemoryFileSystem: true });
 
         const config = vscode.workspace.getConfiguration(
-          "yuri.refactorCQRSHandlerToUseCase"
+          "yuri.refactorCQRSHandlerToUseCase",
         );
         const resultOk = config.get<string>("resultOk", "resultOk");
         const resultFailure = config.get<string>(
           "resultFailure",
-          "resultFailure"
+          "resultFailure",
         );
         const sourceFile = project.createSourceFile(
           "temp.ts",
           document.getText(),
-          { overwrite: true }
+          { overwrite: true },
         );
 
         const refactoredContent = refactorCQRSHandlerToUseCase(
           sourceFile,
           resultOk,
-          resultFailure
+          resultFailure,
         );
 
         if (!refactoredContent) {
@@ -469,13 +469,13 @@ export function activate(context: vscode.ExtensionContext) {
         const originalFileName = path.basename(document.fileName, ".ts");
         const newFileName = path.join(
           originalDir,
-          `${originalFileName}.refactored.ts`
+          `${originalFileName}.refactored.ts`,
         );
 
         fs.writeFileSync(newFileName, refactoredContent);
 
         vscode.window.showInformationMessage(
-          `CQRS Handler refactored to Use Case: ${originalFileName}.refactored.ts`
+          `CQRS Handler refactored to Use Case: ${originalFileName}.refactored.ts`,
         );
 
         const newFileUri = vscode.Uri.file(newFileName);
@@ -485,7 +485,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Error refactoring to Use Case: ${err}`);
         console.error(err);
       }
-    }
+    },
   );
 
   const addReadonlyToClassPropsCommand = vscode.commands.registerCommand(
@@ -496,7 +496,7 @@ export function activate(context: vscode.ExtensionContext) {
         const sourceFile = project.createSourceFile(
           "temp.ts",
           document.getText(),
-          { overwrite: true }
+          { overwrite: true },
         );
 
         const classDeclaration = sourceFile.getClasses().find((cls: any) => {
@@ -504,14 +504,14 @@ export function activate(context: vscode.ExtensionContext) {
           const end = cls.getEnd();
           const classRange = new vscode.Range(
             document.positionAt(start),
-            document.positionAt(end)
+            document.positionAt(end),
           );
           return classRange.contains(range.start);
         });
 
         if (!classDeclaration) {
           vscode.window.showErrorMessage(
-            "No class found at the cursor position."
+            "No class found at the cursor position.",
           );
           return;
         }
@@ -530,21 +530,21 @@ export function activate(context: vscode.ExtensionContext) {
           document.uri,
           new vscode.Range(
             document.positionAt(0),
-            document.positionAt(document.getText().length)
+            document.positionAt(document.getText().length),
           ),
-          updatedText
+          updatedText,
         );
         await vscode.workspace.applyEdit(edit);
         vscode.window.showInformationMessage(
-          `Added readonly to properties of class ${className}`
+          `Added readonly to properties of class ${className}`,
         );
       } catch (err) {
         vscode.window.showErrorMessage(
-          `Error adding readonly to class properties: ${err}`
+          `Error adding readonly to class properties: ${err}`,
         );
         console.error(err);
       }
-    }
+    },
   );
 
   const addGettersToClassPropsCommand = vscode.commands.registerCommand(
@@ -555,7 +555,7 @@ export function activate(context: vscode.ExtensionContext) {
         const sourceFile = project.createSourceFile(
           "temp.ts",
           document.getText(),
-          { overwrite: true }
+          { overwrite: true },
         );
 
         const classDeclaration = sourceFile.getClasses().find((cls: any) => {
@@ -563,14 +563,14 @@ export function activate(context: vscode.ExtensionContext) {
           const end = cls.getEnd();
           const classRange = new vscode.Range(
             document.positionAt(start),
-            document.positionAt(end)
+            document.positionAt(end),
           );
           return classRange.contains(range.start);
         });
 
         if (!classDeclaration) {
           vscode.window.showErrorMessage(
-            "No class found at the cursor position."
+            "No class found at the cursor position.",
           );
           return;
         }
@@ -585,7 +585,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!isAggregate) {
           vscode.window.showErrorMessage(
-            `${extendsText} => Class ${className} does not extend Aggregate with props type.`
+            `${extendsText} => Class ${className} does not extend Aggregate with props type.`,
           );
           return;
         }
@@ -593,7 +593,7 @@ export function activate(context: vscode.ExtensionContext) {
         const propsTypeName = extendsText.match(/Aggregate<(\w+)>/)?.[1];
         if (!propsTypeName) {
           vscode.window.showErrorMessage(
-            `Could not determine props type for Aggregate in class ${className}.`
+            `Could not determine props type for Aggregate in class ${className}.`,
           );
           return;
         }
@@ -601,7 +601,7 @@ export function activate(context: vscode.ExtensionContext) {
         const propsType = sourceFile.getTypeAlias(propsTypeName);
         if (!propsType) {
           vscode.window.showErrorMessage(
-            `Type ${propsTypeName} not found in the file.`
+            `Type ${propsTypeName} not found in the file.`,
           );
           return;
         }
@@ -632,13 +632,13 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.workspace.applyEdit(edit);
 
         vscode.window.showInformationMessage(
-          `Added getters to class ${className}`
+          `Added getters to class ${className}`,
         );
       } catch (err) {
         vscode.window.showErrorMessage(`Error adding getters to class: ${err}`);
         console.error(err);
       }
-    }
+    },
   );
 
   const addMissingConstructorPropsCommand = vscode.commands.registerCommand(
@@ -658,14 +658,14 @@ export function activate(context: vscode.ExtensionContext) {
           nodeAt.asKind(SyntaxKind.NewExpression);
         if (!newExpr)
           return vscode.window.showErrorMessage(
-            "Cursor is not inside a 'new Class(...)' expression."
+            "Cursor is not inside a 'new Class(...)' expression.",
           );
 
         const className = newExpr.getExpression().getText();
         const arg0 = newExpr.getArguments()[0];
         if (!arg0 || !arg0.isKind(SyntaxKind.ObjectLiteralExpression))
           return vscode.window.showErrorMessage(
-            "Expected object literal as first constructor argument."
+            "Expected object literal as first constructor argument.",
           );
         const argObj = arg0.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
 
@@ -673,35 +673,35 @@ export function activate(context: vscode.ExtensionContext) {
         const cls = await findClassNearby(
           className,
           document.uri.fsPath,
-          sourceFile
+          sourceFile,
         );
         if (!cls)
           return vscode.window.showErrorMessage(
-            `Class ${className} not found nearby.`
+            `Class ${className} not found nearby.`,
           );
 
         // 3) Constructor + first param (props)
         const ctor = cls.getConstructors()[0];
         if (!ctor)
           return vscode.window.showErrorMessage(
-            `Class ${className} has no constructor.`
+            `Class ${className} has no constructor.`,
           );
 
         const param = ctor.getParameters()[0];
         if (!param)
           return vscode.window.showErrorMessage(
-            `Constructor of ${className} has no parameters.`
+            `Constructor of ${className} has no parameters.`,
           );
 
         // 4) Figure out the *shape* of the param, including Pick/Omit
         const wantedProps = await getWantedPropsFromParamType(
           param,
           document.uri.fsPath,
-          sourceFile
+          sourceFile,
         );
         if (!wantedProps.length) {
           return vscode.window.showInformationMessage(
-            "No constructor properties detected."
+            "No constructor properties detected.",
           );
         }
 
@@ -713,16 +713,16 @@ export function activate(context: vscode.ExtensionContext) {
               p.isKind(SyntaxKind.PropertyAssignment) ||
               p.isKind(SyntaxKind.ShorthandPropertyAssignment)
                 ? p.getName()
-                : ""
+                : "",
             )
-            .filter(Boolean)
+            .filter(Boolean),
         );
         const missing = wantedProps
           .map((p) => p.name)
           .filter((n) => !existingNames.has(n));
         if (!missing.length)
           return vscode.window.showInformationMessage(
-            "No missing properties to add."
+            "No missing properties to add.",
           );
 
         // 6) Insert with tidy commas + indentation
@@ -733,7 +733,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         const lines = missing.map(
           (name) =>
-            `${indent}${name}: ${valueTemplate.replace("${name}", name)},`
+            `${indent}${name}: ${valueTemplate.replace("${name}", name)},`,
         );
         let insertText = "\n" + lines.join("\n") + "\n";
 
@@ -753,19 +753,19 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.workspace.applyEdit(edit);
 
         vscode.window.showInformationMessage(
-          `Added missing properties: ${missing.join(", ")}`
+          `Added missing properties: ${missing.join(", ")}`,
         );
       } catch (err) {
         console.error("addMissingConstructorProps (fast+pick/omit):", err);
         vscode.window.showErrorMessage(
-          `Error adding missing properties: ${err}`
+          `Error adding missing properties: ${err}`,
         );
       }
 
       // ---------- helpers ----------
       function computeIndent(
         doc: vscode.TextDocument,
-        obj: import("ts-morph").ObjectLiteralExpression
+        obj: import("ts-morph").ObjectLiteralExpression,
       ) {
         const startPos = doc.positionAt(obj.getStart());
         const lineText = doc.lineAt(startPos.line).text;
@@ -776,7 +776,7 @@ export function activate(context: vscode.ExtensionContext) {
       async function getWantedPropsFromParamType(
         param: import("ts-morph").ParameterDeclaration,
         fromFsPath: string,
-        currentSf: import("ts-morph").SourceFile
+        currentSf: import("ts-morph").SourceFile,
       ): Promise<{ name: string; optional: boolean }[]> {
         const tn = param.getTypeNode();
 
@@ -799,7 +799,7 @@ export function activate(context: vscode.ExtensionContext) {
             const baseDecl = await findInterfaceOrTypeNearby(
               parsed.base,
               fromFsPath,
-              currentSf
+              currentSf,
             );
             if (!baseDecl) return [];
             const baseProps = getPropsFromInterfaceOrType(baseDecl);
@@ -815,7 +815,7 @@ export function activate(context: vscode.ExtensionContext) {
             const decl = await findInterfaceOrTypeNearby(
               name,
               fromFsPath,
-              currentSf
+              currentSf,
             );
             if (!decl) return [];
             return getPropsFromInterfaceOrType(decl);
@@ -834,18 +834,18 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       function parsePickOmit(
-        text: string
+        text: string,
       ): { kind: "pick" | "omit"; base: string; fields: string[] } | null {
         // Handles: Pick<Foo, 'a' | 'b'>, Omit<Foo,"a"|'b'>
         const m =
           /^\s*(Pick|Omit)\s*<\s*([A-Za-z0-9_\.]+)\s*,\s*([^>]+)\s*>\s*$/.exec(
-            text
+            text,
           );
         if (!m) return null;
         const kind = m[1].toLowerCase() as "pick" | "omit";
         const base = m[2];
         const fields = Array.from(m[3].matchAll(/['"]([^'"]+)['"]/g)).map(
-          (mm) => mm[1].trim()
+          (mm) => mm[1].trim(),
         );
         return { kind, base, fields };
       }
@@ -853,7 +853,7 @@ export function activate(context: vscode.ExtensionContext) {
       function getPropsFromInterfaceOrType(
         decl:
           | import("ts-morph").InterfaceDeclaration
-          | import("ts-morph").TypeAliasDeclaration
+          | import("ts-morph").TypeAliasDeclaration,
       ): { name: string; optional: boolean }[] {
         if (decl.isKind(SyntaxKind.InterfaceDeclaration)) {
           return decl.getProperties().map((p) => ({
@@ -884,7 +884,7 @@ export function activate(context: vscode.ExtensionContext) {
       async function findClassNearby(
         name: string,
         fromFsPath: string,
-        currentSf: import("ts-morph").SourceFile
+        currentSf: import("ts-morph").SourceFile,
       ) {
         let c = currentSf.getClass(name);
         if (c) return c;
@@ -911,7 +911,7 @@ export function activate(context: vscode.ExtensionContext) {
       async function findInterfaceOrTypeNearby(
         name: string,
         fromFsPath: string,
-        currentSf: import("ts-morph").SourceFile
+        currentSf: import("ts-morph").SourceFile,
       ) {
         const simple = name.split(".").pop()!;
         let d =
@@ -942,7 +942,7 @@ export function activate(context: vscode.ExtensionContext) {
         const existing = project.getSourceFile(fsPath);
         if (existing) return existing;
         const data = await vscode.workspace.fs.readFile(
-          vscode.Uri.file(fsPath)
+          vscode.Uri.file(fsPath),
         );
         const text = Buffer.from(data).toString("utf8");
         return project.createSourceFile(fsPath, text, { overwrite: true });
@@ -957,7 +957,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       async function resolveModuleToFsPath(
         fromFsPath: string,
-        moduleSpecifier: string
+        moduleSpecifier: string,
       ) {
         const base = path.dirname(fromFsPath);
         const candidates = [
@@ -970,7 +970,7 @@ export function activate(context: vscode.ExtensionContext) {
         for (const c of candidates) if (await fileExists(c)) return c;
         return null;
       }
-    }
+    },
   );
 
   const syncClassWithInterfaceCommand = vscode.commands.registerCommand(
@@ -995,7 +995,7 @@ export function activate(context: vscode.ExtensionContext) {
         const impl = classDecl.getImplements()[0];
         if (!impl) {
           vscode.window.showErrorMessage(
-            "Class does not implement an interface."
+            "Class does not implement an interface.",
           );
           return;
         }
@@ -1005,7 +1005,7 @@ export function activate(context: vscode.ExtensionContext) {
         ).replace(/<.*$/, "");
         if (!interfaceName) {
           vscode.window.showErrorMessage(
-            "Could not resolve implemented interface name."
+            "Could not resolve implemented interface name.",
           );
           return;
         }
@@ -1016,12 +1016,12 @@ export function activate(context: vscode.ExtensionContext) {
           iface = await tryFindInterfaceNearby(
             interfaceName,
             document.uri.fsPath,
-            sourceFile
+            sourceFile,
           );
         }
         if (!iface) {
           vscode.window.showErrorMessage(
-            `Interface ${interfaceName} not found nearby (skipping full-project scan for speed).`
+            `Interface ${interfaceName} not found nearby (skipping full-project scan for speed).`,
           );
           return;
         }
@@ -1033,7 +1033,7 @@ export function activate(context: vscode.ExtensionContext) {
         }));
 
         const classPropNames = new Set(
-          classDecl.getProperties().map((p) => p.getName())
+          classDecl.getProperties().map((p) => p.getName()),
         );
         let ctor = classDecl.getConstructors()[0];
 
@@ -1044,11 +1044,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         const missingDecls = ifaceProps.filter(
-          (p) => !classPropNames.has(p.name)
+          (p) => !classPropNames.has(p.name),
         );
         const ctorBodyText = ctor?.getBodyText() ?? "";
         const missingAssignments = ifaceProps.filter(
-          (p) => !new RegExp(`\\bthis\\.${p.name}\\b`).test(ctorBodyText)
+          (p) => !new RegExp(`\\bthis\\.${p.name}\\b`).test(ctorBodyText),
         );
 
         if (
@@ -1057,7 +1057,7 @@ export function activate(context: vscode.ExtensionContext) {
           ctor
         ) {
           vscode.window.showInformationMessage(
-            "No missing properties or constructor assignments found."
+            "No missing properties or constructor assignments found.",
           );
           return;
         }
@@ -1067,7 +1067,7 @@ export function activate(context: vscode.ExtensionContext) {
         // 1) Missing property declarations after opening brace
         if (missingDecls.length) {
           const openBrace = classDecl.getFirstChildByKind(
-            SyntaxKind.OpenBraceToken
+            SyntaxKind.OpenBraceToken,
           );
           if (openBrace) {
             const insertPos = document.positionAt(openBrace.getEnd() + 1);
@@ -1084,16 +1084,16 @@ export function activate(context: vscode.ExtensionContext) {
         // 2) Ensure constructor exists
         if (!ctor) {
           const beforeCloseBrace = classDecl.getLastChildByKind(
-            SyntaxKind.CloseBraceToken
+            SyntaxKind.CloseBraceToken,
           );
           if (!beforeCloseBrace) {
             vscode.window.showErrorMessage(
-              "Could not locate class body for constructor insertion."
+              "Could not locate class body for constructor insertion.",
             );
             return;
           }
           const insertCtorPos = document.positionAt(
-            beforeCloseBrace.getStart()
+            beforeCloseBrace.getStart(),
           );
           const ctorText =
             `\n  constructor(${ctorParamName}: ${interfaceName}) {\n` + `  }\n`;
@@ -1108,7 +1108,7 @@ export function activate(context: vscode.ExtensionContext) {
           ctorInsertPos = document.positionAt(bodyEnd - 1);
         } else {
           const closeBrace = classDecl.getLastChildByKind(
-            SyntaxKind.CloseBraceToken
+            SyntaxKind.CloseBraceToken,
           );
           if (closeBrace) {
             ctorInsertPos = document.positionAt(closeBrace.getStart());
@@ -1128,14 +1128,14 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.workspace.applyEdit(edit);
 
         vscode.window.showInformationMessage(
-          `Added ${missingDecls.length} property(ies) and ${missingAssignments.length} constructor assignment(s).`
+          `Added ${missingDecls.length} property(ies) and ${missingAssignments.length} constructor assignment(s).`,
         );
 
         // helpers
         async function tryFindInterfaceNearby(
           name: string,
           fromFsPath: string,
-          currentSf: import("ts-morph").SourceFile
+          currentSf: import("ts-morph").SourceFile,
         ): Promise<import("ts-morph").InterfaceDeclaration | undefined> {
           for (const imp of currentSf.getImportDeclarations()) {
             const spec = imp.getModuleSpecifierValue();
@@ -1159,7 +1159,7 @@ export function activate(context: vscode.ExtensionContext) {
           const existing = project.getSourceFile(fsPath);
           if (existing) return existing;
           const data = await vscode.workspace.fs.readFile(
-            vscode.Uri.file(fsPath)
+            vscode.Uri.file(fsPath),
           );
           const text = Buffer.from(data).toString("utf8");
           return project.createSourceFile(fsPath, text, { overwrite: true });
@@ -1174,7 +1174,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         async function resolveModuleToFsPath(
           fromFsPath: string,
-          moduleSpecifier: string
+          moduleSpecifier: string,
         ) {
           const base = path.dirname(fromFsPath);
           const candidates = [
@@ -1192,10 +1192,10 @@ export function activate(context: vscode.ExtensionContext) {
       } catch (err) {
         console.error("syncClassWithInterface (fast):", err);
         vscode.window.showErrorMessage(
-          `Error syncing class with interface: ${err}`
+          `Error syncing class with interface: ${err}`,
         );
       }
-    }
+    },
   );
 
   const generateClassFromTypeCommand = vscode.commands.registerCommand(
@@ -1213,14 +1213,14 @@ export function activate(context: vscode.ExtensionContext) {
         const m = document.lineAt(range.start.line).text.match(/type\s+(\w+)/);
         if (!m)
           return vscode.window.showErrorMessage(
-            "Could not determine type name."
+            "Could not determine type name.",
           );
         const typeName = m[1];
 
         const typeAlias = sourceFile.getTypeAlias(typeName);
         if (!typeAlias)
           return vscode.window.showErrorMessage(
-            `Type ${typeName} not found in this file.`
+            `Type ${typeName} not found in this file.`,
           );
 
         // Detect Omit<Base, 'a'|'b'> via node text (fast, same-file only)
@@ -1233,14 +1233,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         const omitMatch =
           /Omit<\s*([A-Za-z0-9_\.]+)\s*,\s*((?:(?:['"][^'"]+['"])\s*(?:\|\s*)?)*)>/.exec(
-            typeText
+            typeText,
           );
         if (omitMatch) {
           baseTypeName = omitMatch[1];
           const omitted = new Set(
             Array.from(omitMatch[2].matchAll(/['"]([^'"]+)['"]/g)).map(
-              (mm) => mm[1]
-            )
+              (mm) => mm[1],
+            ),
           );
 
           const baseIface: InterfaceDeclaration | undefined =
@@ -1250,7 +1250,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           if (!baseIface && !baseTypeAlias) {
             return vscode.window.showErrorMessage(
-              `Base type/interface ${baseTypeName} not found in this file (avoid full workspace scan for speed).`
+              `Base type/interface ${baseTypeName} not found in this file (avoid full workspace scan for speed).`,
             );
           }
 
@@ -1306,7 +1306,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!properties.length)
           return vscode.window.showErrorMessage(
-            `No properties found in type ${typeName}.`
+            `No properties found in type ${typeName}.`,
           );
 
         // Class name
@@ -1320,7 +1320,7 @@ export function activate(context: vscode.ExtensionContext) {
         lines.push(`export class ${className} implements ${typeName} {`);
         for (const p of properties) {
           lines.push(
-            `  readonly ${p.name}${p.isOptional ? "?" : ""}: ${p.type}`
+            `  readonly ${p.name}${p.isOptional ? "?" : ""}: ${p.type}`,
           );
         }
         lines.push("");
@@ -1328,7 +1328,7 @@ export function activate(context: vscode.ExtensionContext) {
         for (const p of properties) {
           if (p.isOptional) {
             lines.push(
-              `    this.${p.name} = init.${p.name} ?? ${defaultFor(p.type)}`
+              `    this.${p.name} = init.${p.name} ?? ${defaultFor(p.type)}`,
             );
           } else {
             lines.push(`    this.${p.name} = init.${p.name}`);
@@ -1354,27 +1354,27 @@ export function activate(context: vscode.ExtensionContext) {
           const target = vscode.Uri.file(path.join(dir, `${className}.ts`));
           await writeFileUtf8(target, classContent);
           vscode.window.showInformationMessage(
-            `Class ${className} generated in ${path.basename(target.fsPath)}.`
+            `Class ${className} generated in ${path.basename(target.fsPath)}.`,
           );
         } else {
           const edit = new vscode.WorkspaceEdit();
           edit.insert(
             document.uri,
             new vscode.Position(document.lineCount + 1, 0),
-            "\n" + classContent
+            "\n" + classContent,
           );
           await vscode.workspace.applyEdit(edit);
           vscode.window.showInformationMessage(
-            `Class ${className} generated inline.`
+            `Class ${className} generated inline.`,
           );
         }
       } catch (err) {
         console.error("generateClassFromType:", err);
         vscode.window.showErrorMessage(
-          `Error generating class from type: ${err}`
+          `Error generating class from type: ${err}`,
         );
       }
-    }
+    },
   );
 
   const generateViewInterfacesCommand = vscode.commands.registerCommand(
@@ -1382,12 +1382,12 @@ export function activate(context: vscode.ExtensionContext) {
     async (document: vscode.TextDocument, range: vscode.Range) => {
       try {
         const config = vscode.workspace.getConfiguration(
-          "yuri.generateViewInterfaces"
+          "yuri.generateViewInterfaces",
         );
         const inNewFile = config.get<boolean>("inNewFile", true);
         const validationMode = config.get<ValidationMode>(
           "validationMode",
-          "partial"
+          "partial",
         );
         const iSuffix = config.get<string>("interfaceSuffix", "");
         // Ensure project + source file come from the real filesystem + tsconfig
@@ -1408,7 +1408,7 @@ export function activate(context: vscode.ExtensionContext) {
         const iface = sourceFile.getInterface(interfaceName);
         if (!iface) {
           vscode.window.showErrorMessage(
-            `Interface ${interfaceName} not found in this file.`
+            `Interface ${interfaceName} not found in this file.`,
           );
           return;
         }
@@ -1417,30 +1417,30 @@ export function activate(context: vscode.ExtensionContext) {
           sourceFile.getVariableDeclaration("_viewSchemas");
         if (!viewSchemasVar) {
           vscode.window.showErrorMessage(
-            `No '_viewSchemas' variable found in the file.`
+            `No '_viewSchemas' variable found in the file.`,
           );
           return;
         }
         const init = viewSchemasVar.getInitializer();
         if (!init || !init.isKind(SyntaxKind.ObjectLiteralExpression)) {
           vscode.window.showErrorMessage(
-            `'_viewSchemas' must be initialized with an object literal.`
+            `'_viewSchemas' must be initialized with an object literal.`,
           );
           return;
         }
         const obj = init.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
         // collect interface props for validation
         const ifacePropNames = new Set(
-          iface.getProperties().map((p) => p.getName())
+          iface.getProperties().map((p) => p.getName()),
         );
         const out: string[] = [];
         if (inNewFile) {
           out.push(
             `import { ${interfaceName} } from './${path.basename(
               document.fileName,
-              ".ts"
+              ".ts",
             )}'`,
-            ""
+            "",
           );
         }
         // ---------------- helpers ----------------
@@ -1459,45 +1459,79 @@ export function activate(context: vscode.ExtensionContext) {
         type Split = {
           top: Set<string>;
           nested: Map<string, Set<string>>;
-          exclusions: Map<string, Set<string>>; // New: tracks fields to exclude, e.g., { "author": Set("privacy") }
+          exclusions: Map<string, Set<string>>; // tracks fields to exclude, e.g., { "author": Set("privacy") }
+          optionalTop: Set<string>; // e.g., "?title"
+          optionalNested: Map<string, Set<string>>; // e.g., "author.?id"
         };
         const splitFields = (fields: string[]): Split => {
           const top = new Set<string>();
           const nested = new Map<string, Set<string>>();
           const exclusions = new Map<string, Set<string>>();
+          const optionalTop = new Set<string>();
+          const optionalNested = new Map<string, Set<string>>();
+          const addNested = (parent: string, child: string) => {
+            if (!nested.has(parent)) {
+              nested.set(parent, new Set());
+            }
+            nested.get(parent)!.add(child);
+          };
+          const addOptionalNested = (parent: string, child: string) => {
+            if (!optionalNested.has(parent)) {
+              optionalNested.set(parent, new Set());
+            }
+            optionalNested.get(parent)!.add(child);
+          };
+
           for (const f of fields) {
-            // Check for exclusion syntax, e.g., "author.!privacy"
+            // Exclusion syntax, e.g., "author.!privacy"
             const exclusionMatch = f.match(/^(\w+)\.\!(\w+)$/);
             if (exclusionMatch) {
               const [, parent, excludedField] = exclusionMatch;
               // Add parent to top-level fields to include the whole object
               top.add(parent);
-              // Track the excluded field
               if (!exclusions.has(parent)) {
                 exclusions.set(parent, new Set());
               }
               exclusions.get(parent)!.add(excludedField);
               continue;
             }
-            // Existing logic for regular fields
+
+            // Optional top-level field: "?title"
+            const optionalTopMatch = f.match(/^\?(\w+)$/);
+            if (optionalTopMatch) {
+              const name = optionalTopMatch[1];
+              top.add(name);
+              optionalTop.add(name);
+              continue;
+            }
+
+            // Optional nested field: "author.?id"
+            const optionalNestedMatch = f.match(/^(\w+)\.\?(\w+)$/);
+            if (optionalNestedMatch) {
+              const [, parent, child] = optionalNestedMatch;
+              addNested(parent, child);
+              addOptionalNested(parent, child);
+              continue;
+            }
+
+            // Regular fields
             const parts = f.split(".");
             if (parts.length === 1) {
               top.add(parts[0]);
             } else if (parts.length >= 2) {
               const [parent, child] = parts as [string, string];
-              if (!nested.has(parent)) {
-                nested.set(parent, new Set());
-              }
-              nested.get(parent)!.add(child);
+              addNested(parent, child);
             }
           }
+
           // If a parent appears both top-level and nested, prefer nested unless it's an exclusion
           for (const parent of nested.keys()) {
             if (!exclusions.has(parent)) {
               top.delete(parent);
             }
           }
-          return { top, nested, exclusions };
+
+          return { top, nested, exclusions, optionalTop, optionalNested };
         };
         // Type rendering helpers
         const printType = (t: Type, ctx: Node) => t.getText(ctx);
@@ -1532,12 +1566,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
         const getChildPropTypeText = (
           parent: string,
-          child: string
+          child: string,
         ): { isArray: boolean; typeText: string } | null => {
           const parentSig = iface.getProperty(parent);
           if (!parentSig) return null;
           const { isArray, elem } = getArrayElementTypeIfArray(
-            parentSig.getType()
+            parentSig.getType(),
           );
           const childSym = elem.getProperty(child);
           if (!childSym) return null;
@@ -1559,11 +1593,12 @@ export function activate(context: vscode.ExtensionContext) {
             continue;
           const fields = extractStringFields(arrInit);
           if (!fields.length) continue;
-          const { top, nested, exclusions } = splitFields(fields);
+          const { top, nested, exclusions, optionalTop, optionalNested } =
+            splitFields(fields);
           // --- validation ---
           const invalidTop = [...top].filter((f) => !ifacePropNames.has(f));
           const invalidNestedParents = [...nested.keys()].filter(
-            (p) => !ifacePropNames.has(p)
+            (p) => !ifacePropNames.has(p),
           );
           const invalidNestedChildren: string[] = [];
           // Validate exclusions
@@ -1571,7 +1606,7 @@ export function activate(context: vscode.ExtensionContext) {
           for (const [parent, excludedFields] of exclusions) {
             if (!ifacePropNames.has(parent)) {
               invalidExclusions.push(
-                ...[...excludedFields].map((f) => `${parent}.!${f}`)
+                ...[...excludedFields].map((f) => `${parent}.!${f}`),
               );
               continue;
             }
@@ -1581,7 +1616,7 @@ export function activate(context: vscode.ExtensionContext) {
               const parentType = parentSig ? parentSig.getType() : undefined;
               const childNames = parentType
                 ? new Set(
-                    parentType.getProperties().map((s: Symbol) => s.getName())
+                    parentType.getProperties().map((s: Symbol) => s.getName()),
                   )
                 : null;
               if (childNames) {
@@ -1619,20 +1654,30 @@ export function activate(context: vscode.ExtensionContext) {
           let finalTop = [...top];
           let finalNested = new Map(nested);
           let finalExclusions = new Map(exclusions);
+          let finalOptionalTop = new Set(optionalTop);
+          let finalOptionalNested = new Map(optionalNested);
           if (validationMode === "strict") {
             if (invalid.length) {
               warnings.push(
-                `Skipped '${viewName}': invalid fields: ${invalid.join(", ")}`
+                `Skipped '${viewName}': invalid fields: ${invalid.join(", ")}`,
               );
               continue;
             }
           } else if (validationMode === "partial") {
             // Keep only valid top-level names
             finalTop = finalTop.filter((f) => ifacePropNames.has(f));
+            finalOptionalTop = new Set(
+              [...finalOptionalTop].filter((f) => ifacePropNames.has(f)),
+            );
             // Require valid parent for nested and exclusions
             for (const p of [...finalNested.keys()]) {
               if (!ifacePropNames.has(p)) {
                 finalNested.delete(p);
+              }
+            }
+            for (const p of [...finalOptionalNested.keys()]) {
+              if (!ifacePropNames.has(p)) {
+                finalOptionalNested.delete(p);
               }
             }
             for (const p of [...finalExclusions.keys()]) {
@@ -1651,16 +1696,24 @@ export function activate(context: vscode.ExtensionContext) {
             if (invalid.length) {
               warnings.push(
                 `Partially generated '${viewName}': ignored invalid fields: ${invalid.join(
-                  ", "
-                )}`
+                  ", ",
+                )}`,
               );
             }
           } else {
             // Loose: only require parent to exist
             finalTop = finalTop.filter((f) => ifacePropNames.has(f));
+            finalOptionalTop = new Set(
+              [...finalOptionalTop].filter((f) => ifacePropNames.has(f)),
+            );
             for (const p of [...finalNested.keys()]) {
               if (!ifacePropNames.has(p)) {
                 finalNested.delete(p);
+              }
+            }
+            for (const p of [...finalOptionalNested.keys()]) {
+              if (!ifacePropNames.has(p)) {
+                finalOptionalNested.delete(p);
               }
             }
             for (const p of [...finalExclusions.keys()]) {
@@ -1671,8 +1724,8 @@ export function activate(context: vscode.ExtensionContext) {
             if (invalid.length) {
               warnings.push(
                 `Loosely generated '${viewName}': interface does not contain: ${invalid.join(
-                  ", "
-                )}`
+                  ", ",
+                )}`,
               );
             }
           }
@@ -1696,6 +1749,8 @@ export function activate(context: vscode.ExtensionContext) {
               const { isArray, elem } = getArrayElementTypeIfArray(parentType);
               const childProps = elem.getProperties();
               const childLines: string[] = [];
+              const optionalChildSet =
+                finalOptionalNested.get(name) ?? new Set<string>();
               for (const childProp of childProps) {
                 const childName = childProp.getName();
                 if (excludedFields.has(childName)) continue; // Skip excluded fields
@@ -1704,35 +1759,55 @@ export function activate(context: vscode.ExtensionContext) {
                   .getNonNullableType()
                   .getText(parentSig);
                 childLines.push(
-                  `${childName}: ${normalizePrimitives(childTypeText)}`
+                  `${childName}${
+                    optionalChildSet.has(childName) ? "?" : ""
+                  }: ${normalizePrimitives(childTypeText)}`,
                 );
               }
               if (!childLines.length) continue;
               const obj = `{ ${childLines.join("; ")} }`;
               lines.push(
-                isArray ? ` ${name}: Array<${obj}>;` : ` ${name}: ${obj};`
+                isArray
+                  ? ` ${name}${
+                      finalOptionalTop.has(name) ? "?" : ""
+                    }: Array<${obj}>;`
+                  : ` ${name}${finalOptionalTop.has(name) ? "?" : ""}: ${obj};`,
               );
             } else {
-              lines.push(` ${name}: ${normalizePrimitives(tt)};`);
+              lines.push(
+                ` ${name}${
+                  finalOptionalTop.has(name) ? "?" : ""
+                }: ${normalizePrimitives(tt)};`,
+              );
             }
           }
           // Nested fields (existing logic)
           for (const [parent, childs] of finalNested) {
             const pieces: string[] = [];
             let isArrayParent: boolean | null = null;
+            const optionalChildSet =
+              finalOptionalNested.get(parent) ?? new Set<string>();
             for (const child of childs) {
               const info = getChildPropTypeText(parent, child);
               if (!info) continue;
               if (isArrayParent == null) isArrayParent = info.isArray;
               if (isArrayParent !== info.isArray) isArrayParent = false;
-              pieces.push(`${child}: ${normalizePrimitives(info.typeText)}`);
+              pieces.push(
+                `${child}${optionalChildSet.has(child) ? "?" : ""}: ${normalizePrimitives(
+                  info.typeText,
+                )}`,
+              );
             }
             if (!pieces.length) continue;
             const obj = `{ ${pieces.join("; ")} }`;
             lines.push(
               isArrayParent
-                ? ` ${parent}: Array<${obj}>;`
-                : ` ${parent}: ${obj};`
+                ? ` ${parent}${
+                    finalOptionalTop.has(parent) ? "?" : ""
+                  }: Array<${obj}>;`
+                : ` ${parent}${
+                    finalOptionalTop.has(parent) ? "?" : ""
+                  }: ${obj};`,
             );
           }
           if (!lines.length) continue;
@@ -1742,7 +1817,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!generated) {
           vscode.window.showErrorMessage(
             `No view interfaces generated from '_viewSchemas'.` +
-              (warnings.length ? ` Details: ${warnings.join(" | ")}` : "")
+              (warnings.length ? ` Details: ${warnings.join(" | ")}` : ""),
           );
           return;
         }
@@ -1750,34 +1825,35 @@ export function activate(context: vscode.ExtensionContext) {
         if (inNewFile) {
           const dir = path.dirname(document.uri.fsPath);
           const target = vscode.Uri.file(
-            path.join(dir, `${interfaceName}Views.ts`)
+            path.join(dir, `${interfaceName}Views.ts`),
           );
           await writeFileUtf8(target, content);
           vscode.window.showInformationMessage(
             `Generated ${generated} interfaces in ${path.basename(
-              target.fsPath
-            )}.` + (warnings.length ? ` Warnings: ${warnings.join(" | ")}` : "")
+              target.fsPath,
+            )}.` +
+              (warnings.length ? ` Warnings: ${warnings.join(" | ")}` : ""),
           );
         } else {
           const edit = new vscode.WorkspaceEdit();
           edit.insert(
             document.uri,
             new vscode.Position(document.lineCount + 1, 0),
-            "\n" + content
+            "\n" + content,
           );
           await vscode.workspace.applyEdit(edit);
           vscode.window.showInformationMessage(
             `Generated ${generated} interfaces inline.` +
-              (warnings.length ? ` Warnings: ${warnings.join(" | ")}` : "")
+              (warnings.length ? ` Warnings: ${warnings.join(" | ")}` : ""),
           );
         }
       } catch (err) {
         console.error("generateViewInterfaces:", err);
         vscode.window.showErrorMessage(
-          `Error generating view interfaces: ${err}`
+          `Error generating view interfaces: ${err}`,
         );
       }
-    }
+    },
   );
   // ---------------- generate factory from TYPE (fast same-file Omit/Pick) ----------------
   const generateFactoryFromTypeCommand = vscode.commands.registerCommand(
@@ -1788,7 +1864,7 @@ export function activate(context: vscode.ExtensionContext) {
         const inNewFile = cfg.get<boolean>("inNewFile", true);
         const functionPrefix = cfg.get<string>("functionPrefix", "create");
         const stripSuffixRx = new RegExp(
-          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$")
+          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$"),
         );
 
         const project = getProject();
@@ -1797,14 +1873,14 @@ export function activate(context: vscode.ExtensionContext) {
         const m = document.lineAt(range.start.line).text.match(/type\s+(\w+)/);
         if (!m)
           return vscode.window.showErrorMessage(
-            "Could not determine type name."
+            "Could not determine type name.",
           );
         const typeName = m[1];
 
         const typeAlias = sourceFile.getTypeAlias(typeName);
         if (!typeAlias)
           return vscode.window.showErrorMessage(
-            `Type ${typeName} not found in this file.`
+            `Type ${typeName} not found in this file.`,
           );
 
         // Collect properties (supports Omit<Base, 'a'|'b'> and Pick<Base, 'a'|'b'> via node text)
@@ -1817,11 +1893,11 @@ export function activate(context: vscode.ExtensionContext) {
         // Try Omit<Base, 'a'|'b'> and Pick<Base, 'a'|'b'>
         const omitMatch =
           /Omit<\s*([A-Za-z0-9_\.]+)\s*,\s*((?:(?:['"][^'"]+['"])\s*(?:\|\s*)?)*)>/.exec(
-            typeText
+            typeText,
           );
         const pickMatch =
           /Pick<\s*([A-Za-z0-9_\.]+)\s*,\s*((?:(?:['"][^'"]+['"])\s*(?:\|\s*)?)*)>/.exec(
-            typeText
+            typeText,
           );
 
         function parseKeyList(raw: string) {
@@ -1838,7 +1914,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           if (!baseIface && !baseType) {
             return vscode.window.showErrorMessage(
-              `Base ${baseTypeName} not found in this file (factory-from-type avoids workspace scan).`
+              `Base ${baseTypeName} not found in this file (factory-from-type avoids workspace scan).`,
             );
           }
 
@@ -1872,13 +1948,13 @@ export function activate(context: vscode.ExtensionContext) {
             properties = baseProps.filter((p) => keys.has(p.name));
             // warn if invalid keys
             const invalid = Array.from(keys).filter(
-              (k) => !baseProps.some((p) => p.name === k)
+              (k) => !baseProps.some((p) => p.name === k),
             );
             if (invalid.length) {
               return vscode.window.showErrorMessage(
                 `Invalid fields in Pick: ${invalid.join(
-                  ", "
-                )} not found in ${baseTypeName}.`
+                  ", ",
+                )} not found in ${baseTypeName}.`,
               );
             }
           } else {
@@ -1908,7 +1984,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!properties.length)
           return vscode.window.showErrorMessage(
-            `No properties found in type ${typeName}.`
+            `No properties found in type ${typeName}.`,
           );
 
         // Factory name
@@ -1921,19 +1997,19 @@ export function activate(context: vscode.ExtensionContext) {
           lines.push(
             `import type { ${typeName} } from './${path.basename(
               document.fileName,
-              ".ts"
-            )}';`
+              ".ts",
+            )}';`,
           );
           lines.push("");
         }
         lines.push(
-          `export function ${factoryName}(init: ${typeName}): Readonly<${typeName}> {`
+          `export function ${factoryName}(init: ${typeName}): Readonly<${typeName}> {`,
         );
         lines.push(`  return Object.freeze({`);
         for (const p of properties) {
           if (p.isOptional) {
             lines.push(
-              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`
+              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`,
             );
           } else {
             lines.push(`    ${p.name}: init.${p.name},`);
@@ -1949,28 +2025,28 @@ export function activate(context: vscode.ExtensionContext) {
           await writeFileUtf8(target, fnContent);
           vscode.window.showInformationMessage(
             `Factory ${factoryName} generated in ${path.basename(
-              target.fsPath
-            )}.`
+              target.fsPath,
+            )}.`,
           );
         } else {
           const edit = new vscode.WorkspaceEdit();
           edit.insert(
             document.uri,
             new vscode.Position(document.lineCount + 1, 0),
-            "\n" + fnContent
+            "\n" + fnContent,
           );
           await vscode.workspace.applyEdit(edit);
           vscode.window.showInformationMessage(
-            `Factory ${factoryName} generated inline.`
+            `Factory ${factoryName} generated inline.`,
           );
         }
       } catch (err) {
         console.error("generateFactoryFromType:", err);
         vscode.window.showErrorMessage(
-          `Error generating factory from type: ${err}`
+          `Error generating factory from type: ${err}`,
         );
       }
-    }
+    },
   );
 
   // ---------------- generate factory from INTERFACE (AST-first: Pick/Omit + alias base) ----------------
@@ -1982,7 +2058,7 @@ export function activate(context: vscode.ExtensionContext) {
         const inNewFile = cfg.get<boolean>("inNewFile", false);
         const functionPrefix = cfg.get<string>("functionPrefix", "create");
         const stripSuffixRx = new RegExp(
-          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$")
+          cfg.get<string>("stripSuffixRegex", "(ViewModel|View|Props)$"),
         );
 
         const project = getProject();
@@ -1992,7 +2068,7 @@ export function activate(context: vscode.ExtensionContext) {
         const m = line.match(/interface\s+(\w+)/);
         if (!m) {
           return vscode.window.showErrorMessage(
-            "Could not determine interface name."
+            "Could not determine interface name.",
           );
         }
         const interfaceName = m[1];
@@ -2000,7 +2076,7 @@ export function activate(context: vscode.ExtensionContext) {
         const iface = sourceFile.getInterface(interfaceName);
         if (!iface) {
           return vscode.window.showErrorMessage(
-            `Interface ${interfaceName} not found in this file.`
+            `Interface ${interfaceName} not found in this file.`,
           );
         }
 
@@ -2012,15 +2088,15 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Helpers for parsing heritage type args (local to this command)
         function extractStringLiteralKeys(
-          typeNode: import("ts-morph").TypeNode
+          typeNode: import("ts-morph").TypeNode,
         ): string[] {
           const text = typeNode.getText();
           return Array.from(text.matchAll(/['"]([^'"]+)['"]/g)).map(
-            (m) => m[1]
+            (m) => m[1],
           );
         }
         function getBaseNameFromTypeArg(
-          typeNode: import("ts-morph").TypeNode
+          typeNode: import("ts-morph").TypeNode,
         ): string | null {
           try {
             // getText() is fine; we only need the simple name (last segment if qualified)
@@ -2057,7 +2133,7 @@ export function activate(context: vscode.ExtensionContext) {
           const existing = project.getSourceFile(fsPath);
           if (existing) return existing;
           const data = await vscode.workspace.fs.readFile(
-            vscode.Uri.file(fsPath)
+            vscode.Uri.file(fsPath),
           );
           const text = Buffer.from(data).toString("utf8");
           return project.createSourceFile(fsPath, text, { overwrite: true });
@@ -2072,7 +2148,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         async function resolveModuleToFsPath(
           fromFsPath: string,
-          moduleSpecifier: string
+          moduleSpecifier: string,
         ) {
           const base = path.dirname(fromFsPath);
           const candidates = [
@@ -2088,7 +2164,7 @@ export function activate(context: vscode.ExtensionContext) {
           return null;
         }
         async function tryFindDeclNearby(
-          name: string
+          name: string,
         ): Promise<InterfaceDeclaration | TypeAliasDeclaration | undefined> {
           const simple = name.split(".").pop()!;
 
@@ -2104,7 +2180,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!spec.startsWith(".")) continue;
             const fsPath = await resolveModuleToFsPath(
               document.uri.fsPath,
-              spec
+              spec,
             );
             if (!fsPath) continue;
             const sf = await ensureFileLoaded(fsPath);
@@ -2130,7 +2206,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         function getPropsFromDecl(
-          decl: InterfaceDeclaration | TypeAliasDeclaration
+          decl: InterfaceDeclaration | TypeAliasDeclaration,
         ): PropInfo[] {
           if (decl.getKind() === SyntaxKind.InterfaceDeclaration) {
             const i = decl as InterfaceDeclaration;
@@ -2167,7 +2243,7 @@ export function activate(context: vscode.ExtensionContext) {
           const baseDecl = await tryFindDeclNearby(baseTypeName);
           if (!baseDecl) {
             return vscode.window.showErrorMessage(
-              `Base type ${baseTypeName} not found nearby (skipping full-project scan for speed).`
+              `Base type ${baseTypeName} not found nearby (skipping full-project scan for speed).`,
             );
           }
           const baseProps = getPropsFromDecl(baseDecl);
@@ -2177,13 +2253,13 @@ export function activate(context: vscode.ExtensionContext) {
             properties = baseProps.filter((p) => pickSet.has(p.name));
 
             const invalid = keyList.filter(
-              (k) => !baseProps.some((p) => p.name === k)
+              (k) => !baseProps.some((p) => p.name === k),
             );
             if (invalid.length) {
               return vscode.window.showErrorMessage(
                 `Invalid fields in Pick: ${invalid.join(
-                  ", "
-                )} not found in ${baseTypeName}.`
+                  ", ",
+                )} not found in ${baseTypeName}.`,
               );
             }
           } else {
@@ -2209,7 +2285,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!properties.length) {
           return vscode.window.showErrorMessage(
-            `No properties found in interface ${interfaceName}.`
+            `No properties found in interface ${interfaceName}.`,
           );
         }
 
@@ -2223,19 +2299,19 @@ export function activate(context: vscode.ExtensionContext) {
           lines.push(
             `import type { ${interfaceName} } from './${path.basename(
               document.fileName,
-              ".ts"
-            )}';`
+              ".ts",
+            )}';`,
           );
           lines.push("");
         }
         lines.push(
-          `export function ${factoryName}(init: ${interfaceName}): Readonly<${interfaceName}> {`
+          `export function ${factoryName}(init: ${interfaceName}): Readonly<${interfaceName}> {`,
         );
         lines.push(`  return Object.freeze({`);
         for (const p of properties) {
           if (p.isOptional) {
             lines.push(
-              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`
+              `    ${p.name}: init.${p.name} ?? ${defaultFor(p.type)},`,
             );
           } else {
             lines.push(`    ${p.name}: init.${p.name},`);
@@ -2248,13 +2324,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (inNewFile) {
           const originalDir = path.dirname(document.uri.fsPath);
           const target = vscode.Uri.file(
-            path.join(originalDir, `${factoryName}.ts`)
+            path.join(originalDir, `${factoryName}.ts`),
           );
           await writeFileUtf8(target, fnContent);
           vscode.window.showInformationMessage(
             `Factory ${factoryName} generated in ${path.basename(
-              target.fsPath
-            )}.`
+              target.fsPath,
+            )}.`,
           );
         } else {
           const edit = new vscode.WorkspaceEdit();
@@ -2262,16 +2338,16 @@ export function activate(context: vscode.ExtensionContext) {
           edit.insert(document.uri, position, "\n" + fnContent);
           await vscode.workspace.applyEdit(edit);
           vscode.window.showInformationMessage(
-            `Factory ${factoryName} generated inline.`
+            `Factory ${factoryName} generated inline.`,
           );
         }
       } catch (err) {
         console.error("generateFactoryFromInterface:", err);
         vscode.window.showErrorMessage(
-          `Error generating factory from interface: ${err}`
+          `Error generating factory from interface: ${err}`,
         );
       }
-    }
+    },
   );
 
   context.subscriptions.push(generateClassCommand);
@@ -2297,7 +2373,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
     document: vscode.TextDocument,
     range: vscode.Range,
     context: vscode.CodeActionContext,
-    token: vscode.CancellationToken
+    token: vscode.CancellationToken,
   ): vscode.CodeAction[] | undefined {
     const actions: vscode.CodeAction[] = [];
     const lineText = document.lineAt(range.start.line).text;
@@ -2307,7 +2383,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
     if (lineText.includes("interface ")) {
       const fix = new vscode.CodeAction(
         "Generate Class from Interface (Yuri)",
-        vscode.CodeActionKind.QuickFix
+        vscode.CodeActionKind.QuickFix,
       );
       fix.command = {
         title: "Generate Class",
@@ -2317,7 +2393,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       actions.push(fix);
       const generateViewInterfacesFix = new vscode.CodeAction(
         "Generate View Interfaces (Yuri)",
-        vscode.CodeActionKind.QuickFix
+        vscode.CodeActionKind.QuickFix,
       );
       generateViewInterfacesFix.command = {
         title: "Generate View Interfaces",
@@ -2327,7 +2403,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       actions.push(generateViewInterfacesFix);
       const generateFactoryFromInterface = new vscode.CodeAction(
         "Generate Factory From Interfaces (Yuri)",
-        vscode.CodeActionKind.QuickFix
+        vscode.CodeActionKind.QuickFix,
       );
       generateFactoryFromInterface.command = {
         title: "Generate Factory From Interfaces",
@@ -2340,7 +2416,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
     if (lineText.includes("type ")) {
       const fix = new vscode.CodeAction(
         "Generate Class from Type (Yuri)",
-        vscode.CodeActionKind.QuickFix
+        vscode.CodeActionKind.QuickFix,
       );
       fix.command = {
         title: "Generate Class from Type",
@@ -2350,7 +2426,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       actions.push(fix);
       const generateFactoryFromType = new vscode.CodeAction(
         "Generate Factory From Type (Yuri)",
-        vscode.CodeActionKind.QuickFix
+        vscode.CodeActionKind.QuickFix,
       );
       generateFactoryFromType.command = {
         title: "Generate Factory From Type",
@@ -2369,7 +2445,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
     ) {
       const refactor = new vscode.CodeAction(
         "Refactor CQRS Handler to Use Case (Yuri)",
-        vscode.CodeActionKind.Refactor
+        vscode.CodeActionKind.Refactor,
       );
       refactor.command = {
         title: "Refactor to Use Case",
@@ -2384,7 +2460,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       const sourceFile = project.createSourceFile(
         "temp.ts",
         document.getText(),
-        { overwrite: true }
+        { overwrite: true },
       );
 
       const classDeclaration = sourceFile.getClasses().find((cls: any) => {
@@ -2392,7 +2468,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
         const end = cls.getEnd();
         const classRange = new vscode.Range(
           document.positionAt(start),
-          document.positionAt(end)
+          document.positionAt(end),
         );
         return classRange.contains(range.start);
       });
@@ -2400,7 +2476,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       if (lineText.includes("new ")) {
         const addPropsFix = new vscode.CodeAction(
           "Add Missing Constructor Properties (Yuri)",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         addPropsFix.command = {
           title: "Add Missing Constructor Props",
@@ -2413,7 +2489,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       if (lineText.includes("class ") && lineText.includes("implements")) {
         const fix = new vscode.CodeAction(
           "Sync Class with Interface (Yuri)",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         fix.command = {
           title: "Sync Class with Interface",
@@ -2426,7 +2502,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
       if (classDeclaration) {
         const readonlyAction = new vscode.CodeAction(
           "Add readonly to Class Properties (Yuri)",
-          vscode.CodeActionKind.Refactor
+          vscode.CodeActionKind.Refactor,
         );
         readonlyAction.command = {
           title: "Add readonly to Class Properties",
@@ -2445,7 +2521,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
         if (isAggregate) {
           const gettersAction = new vscode.CodeAction(
             "Add Getters to Class Properties (Yuri)",
-            vscode.CodeActionKind.Refactor
+            vscode.CodeActionKind.Refactor,
           );
           gettersAction.command = {
             title: "Add Getters to Class Properties",
@@ -2466,7 +2542,7 @@ class YuriCodeActionProvider implements vscode.CodeActionProvider {
 function refactorCQRSHandlerToUseCase(
   sourceFile: any,
   resultOk: string,
-  resultFailure: string
+  resultFailure: string,
 ): string | null {
   const text = sourceFile.getFullText();
 
@@ -2482,7 +2558,7 @@ function refactorCQRSHandlerToUseCase(
   let refactoredContent = text;
 
   const commandOrQueryMatch = text.match(
-    /export\s+class\s+(\w+(?:Command|Query))\s+extends\s+(?:Command|Query)/
+    /export\s+class\s+(\w+(?:Command|Query))\s+extends\s+(?:Command|Query)/,
   );
   const commandOrQueryName = commandOrQueryMatch
     ? commandOrQueryMatch[1]
@@ -2504,31 +2580,31 @@ function refactorCQRSHandlerToUseCase(
       refactoredContent = refactoredContent.replace(
         new RegExp(
           `import\\s+\\{[\\s\\n]*${importName}[\\s\\n]*\\}\\s+from\\s+['"][^'"]*['"][\\s\\n]*`,
-          "g"
+          "g",
         ),
-        ""
+        "",
       );
       refactoredContent = refactoredContent.replace(
         new RegExp(
           `import\\s+\\{[\\s\\n]*(?:[^}]*?,\\s*${importName}|${importName},\\s*[^}]*)[\\s\\n]*\\}\\s+from\\s+['"][^'"]*['"][\\s\\n]*`,
-          "g"
+          "g",
         ),
         (match: string) => {
           let cleanedImport = match.replace(
             new RegExp(`,\\s*${importName}|${importName}\\s*,`),
-            ""
+            "",
           );
           cleanedImport = cleanedImport.replace(/\s*,\s*}/g, " }");
           cleanedImport = cleanedImport.replace(/{\s*}/g, "");
           return cleanedImport.includes("{ }") ? "" : cleanedImport;
-        }
+        },
       );
     }
   });
 
   refactoredContent = refactoredContent.replace(
     /import\s+\{\s*HttpStatus,\s*Inject,\s*Injectable,\s*Type\s*\}\s+from\s+['"][^'"]*['"][\s\n]*/g,
-    "import { HttpStatus, Inject, Injectable } from '@nestjs/common'\n"
+    "import { HttpStatus, Inject, Injectable } from '@nestjs/common'\n",
   );
 
   const importLines = refactoredContent.split("\n");
@@ -2539,7 +2615,7 @@ function refactorCQRSHandlerToUseCase(
 
   if (text.includes("failure(") && text.includes("ok(")) {
     newImports.push(
-      `import { ${resultFailure}, ${resultOk} } from '@common/domain'`
+      `import { ${resultFailure}, ${resultOk} } from '@common/domain'`,
     );
   } else {
     if (text.includes("failure(")) {
@@ -2566,12 +2642,12 @@ function refactorCQRSHandlerToUseCase(
 
   refactoredContent = refactoredContent.replace(
     /export\s+class\s+(\w+(?:Command|Query))\s+extends\s+(?:Command|Query)\s+implements\s+(\w+)\s*\{/g,
-    "export class $1 implements $2 {"
+    "export class $1 implements $2 {",
   );
 
   refactoredContent = refactoredContent.replace(
     /export\s+class\s+(\w+(?:Command|Query))\s+extends\s+(?:Command|Query)\s*\{/g,
-    "export class $1 {"
+    "export class $1 {",
   );
 
   refactoredContent = refactoredContent.replace(
@@ -2579,42 +2655,42 @@ function refactorCQRSHandlerToUseCase(
     function (_: string, params: string, body: string) {
       const cleanedBody = body.trim() ? `\n    ${body.trim()}\n  ` : "\n  ";
       return `constructor(${params}) {${cleanedBody}}`;
-    }
+    },
   );
 
   refactoredContent = refactoredContent.replace(
     /export\s+class\s+(\w+)(?:Query|Command)Handler/g,
-    "export class $1UseCase"
+    "export class $1UseCase",
   );
 
   refactoredContent = refactoredContent.replace(
     /implements\s+I(?:Query|Command)Handler<([^,]+),\s*([^>]+)>/g,
-    "implements IUseCase<$1, $2>"
+    "implements IUseCase<$1, $2>",
   );
 
   refactoredContent = refactoredContent.replace(
     /get\s+(?:query|command)\(\):\s*Type<(?:Query|Command)>\s*\{\s*return\s+\w+(?:Query|Command)\s*\}\s*/g,
-    ""
+    "",
   );
 
   refactoredContent = refactoredContent.replace(
     /async\s+execute\(([^)]*)\):\s*Promise<Either<([^,]+),\s*ICoreError>>\s*\{/g,
     function (_: string, params: string, returnType: string) {
       return `async execute(${params}): Promise<${returnType}> {`;
-    }
+    },
   );
 
   if (text.includes("failure(")) {
     refactoredContent = refactoredContent.replace(
       /return\s+failure\(/g,
-      `return ${resultFailure}(`
+      `return ${resultFailure}(`,
     );
   }
 
   if (text.includes("ok(")) {
     refactoredContent = refactoredContent.replace(
       /return\s+ok\(/g,
-      `return ${resultOk}(`
+      `return ${resultOk}(`,
     );
   }
 
@@ -2677,7 +2753,7 @@ function extractStringLiteralKeys(typeNode: TypeNode): string[] {
 }
 
 function getPropsFromDecl(
-  decl: InterfaceDeclaration | TypeAliasDeclaration
+  decl: InterfaceDeclaration | TypeAliasDeclaration,
 ): { name: string; type: string; isOptional: boolean }[] {
   // Interface
   if (decl.isKind(SyntaxKind.InterfaceDeclaration)) {
@@ -2700,7 +2776,7 @@ function getPropsFromDecl(
             name: (m as PropertySignature).getName(),
             type: getPropTypeFast(m as PropertySignature),
             isOptional: (m as PropertySignature).hasQuestionToken(),
-          } as { name: string; type: string; isOptional: boolean })
+          }) as { name: string; type: string; isOptional: boolean },
       );
   }
 
