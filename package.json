@@ -2,7 +2,7 @@
   "name": "yuri-typescript-toolbox",
   "displayName": "Yuri",
   "description": "typescript toolbox with config options",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "engines": {
     "vscode": "^1.87.0"
   },
@@ -72,16 +72,6 @@
           "type": "string",
           "default": "(ViewModel|View|Props)$",
           "description": "stripe Suffix Regex."
-        },
-        "yuri.yuri.refactorCQRSHandlerToUseCase.resultOk": {
-          "type": "string",
-          "default": "resultOk",
-          "description": "return type of UseCase in ok"
-        },
-        "yuri.yuri.refactorCQRSHandlerToUseCase.resultFailure": {
-          "type": "string",
-          "default": "resultFailure",
-          "description": "return type of UseCase in failure"
         }
       }
     },
@@ -97,10 +87,6 @@
       {
         "command": "yuri.generateClassFromInterface",
         "title": "Generate Class from Interface (Yuri)"
-      },
-      {
-        "command": "yuri.refactorCQRSHandlerToUseCase",
-        "title": "Refactor CQRS Handler to Use Case (Yuri)"
       },
       {
         "command": "yuri.addMissingConstructorProps",

@@ -19,7 +19,6 @@ import {
   generateFactoryFromType,
 } from "./commands/generateFactory";
 import { generateViewInterfaces } from "./commands/generateViewInterfaces";
-import { refactorCQRSHandlerToUseCaseCommand } from "./commands/refactorCQRS";
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Extension "yuri" is now active!');
@@ -51,7 +50,6 @@ export function activate(context: vscode.ExtensionContext) {
     ["yuri.addGettersToClassProps", addGettersToClassProps],
     ["yuri.addMissingConstructorProps", addMissingConstructorProps],
     ["yuri.syncClassWithInterfaceProps", syncClassWithInterfaceProps],
-    ["yuri.refactorCQRSHandlerToUseCase", refactorCQRSHandlerToUseCaseCommand],
   ];
 
   for (const [id, handler] of commands) {

@@ -59,24 +59,6 @@ export class YuriCodeActionProvider implements vscode.CodeActionProvider {
       );
     }
 
-    // ── CQRS refactor ───────────────────────────────────────────────
-    const fullText = document.getText();
-    if (
-      (fullText.includes("QueryHandler") &&
-        fullText.includes("IQueryHandler")) ||
-      (fullText.includes("CommandHandler") &&
-        fullText.includes("ICommandHandler"))
-    ) {
-      actions.push(
-        this.action(
-          "Refactor CQRS Handler to Use Case (Yuri)",
-          "yuri.refactorCQRSHandlerToUseCase",
-          [document],
-          vscode.CodeActionKind.Refactor,
-        ),
-      );
-    }
-
     // ── new Foo({}) → add missing props ─────────────────────────────
     if (/\bnew\s+/.test(lineText)) {
       actions.push(
